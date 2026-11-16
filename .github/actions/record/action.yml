@@ -1,0 +1,44 @@
+name: Record result
+description: Records the job's environment and outcome for the generated CI report and uploads it
+
+inputs:
+  kind:
+    description: compatibility, suite or benchmark
+    required: true
+  outcome:
+    description: Outcome of the step that ran the suite
+    required: true
+  name:
+    description: Unique artifact name
+    required: true
+  database-container:
+    description: Container id of the database service, empty for SQLite
+    default: ''
+  redis-container:
+    description: Container id of the Redis service
+    required: true
+  benchmark:
+    description: Benchmark report to include
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Record environment and outcome
+      shell: bash
+      env:
+        JOB_KIND: ${{ inputs.kind }}
+        DATABASE_CONTAINER: ${{ inputs.database-container }}
+        REDIS_CONTAINER: ${{ inputs.redis-container }}
+        OUTCOME: ${{ inputs.outcome }}
+        BENCHMARK: ${{ inputs.benchmark }}
+        NAME: ${{ inputs.name }}
+      run: '"$GITHUB_ACTION_PATH/../../scripts/record-result.sh" "$RUNNER_TEMP/$NAME.json" "$OUTCOME" ${BENCHMARK:+"$BENCHMARK"}'
+
+    - name: Upload result
+      uses: actions/upload-artifact@v7
+      with:
+        name: result-${{ inputs.name }}
+        path: ${{ runner.temp }}/${{ inputs.name }}.json
+        if-no-files-found: error
+        retention-days: 7

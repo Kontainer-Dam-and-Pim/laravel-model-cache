@@ -5,6 +5,7 @@ Automatic Redis query cache for Laravel's query builder and Eloquent, with inval
 [![Tests](https://github.com/Kontainer-Dam-and-Pim/laravel-model-cache/actions/workflows/tests.yml/badge.svg)](https://github.com/Kontainer-Dam-and-Pim/laravel-model-cache/actions/workflows/tests.yml)
 
 - [Requirements](#requirements)
+- [Compatibility](#compatibility)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Configuration](#configuration)
@@ -14,6 +15,7 @@ Automatic Redis query cache for Laravel's query builder and Eloquent, with inval
 - [Operating it](#operating-it)
 - [Console commands](#console-commands)
 - [Metrics](#metrics)
+- [Benchmarks](#benchmarks)
 - [Limitations](#limitations)
 - [Development](#development)
 - [License](#license)
@@ -28,6 +30,13 @@ Automatic Redis query cache for Laravel's query builder and Eloquent, with inval
 | Client    | phpredis or Predis                                             |
 | Databases | MySQL, MariaDB, PostgreSQL, SQLite, SQL Server                 |
 | Optional  | APCu, to share failure state across PHP-FPM processes          |
+
+The versions actually tested are listed under [Compatibility](#compatibility).
+
+## Compatibility
+
+<!-- compatibility:start -->
+<!-- compatibility:end -->
 
 ## Installation
 
@@ -261,6 +270,11 @@ Cost:
 - Counts only PHP sees are written once per request or job, and at most every 10 seconds by long-lived workers.
 
 Counters are kept per time bucket, outside the cache generation, so flushes and migrations keep them. A query is counted under its first table.
+
+## Benchmarks
+
+<!-- benchmarks:start -->
+<!-- benchmarks:end -->
 
 ## Limitations
 

@@ -1,0 +1,41 @@
+name: Set up PHP and dependencies
+description: Installs PHP with the extensions the suites need and resolves Composer dependencies
+
+inputs:
+  php:
+    description: PHP version
+    required: true
+  dependencies:
+    description: locked installs composer.lock, lowest and highest resolve every dependency to its oldest or newest allowed version
+    default: locked
+
+runs:
+  using: composite
+  steps:
+    - name: Set up PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ inputs.php }}
+        extensions: redis, apcu, pcntl, pdo_mysql, pdo_pgsql, pdo_sqlite
+        ini-values: apc.enable_cli=1
+        coverage: none
+        tools: composer
+
+    - name: Cache Composer downloads
+      uses: actions/cache@v6
+      with:
+        path: ~/.composer/cache
+        key: composer-${{ inputs.php }}-${{ inputs.dependencies }}-${{ hashFiles('composer.json', 'composer.lock') }}
+        restore-keys: composer-${{ inputs.php }}-${{ inputs.dependencies }}-
+
+    - name: Install ${{ inputs.dependencies }} dependencies
+      shell: bash
+      env:
+        DEPENDENCIES: ${{ inputs.dependencies }}
+      run: |
+        case "$DEPENDENCIES" in
+          locked) composer install --no-interaction --no-progress --prefer-dist ;;
+          lowest) composer update --no-interaction --no-progress --prefer-dist --prefer-stable --prefer-lowest ;;
+          highest) composer update --no-interaction --no-progress --prefer-dist --prefer-stable ;;
+          *) echo "Unknown dependency set $DEPENDENCIES" >&2; exit 1 ;;
+        esac
