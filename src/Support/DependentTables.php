@@ -479,8 +479,7 @@ final class DependentTables
      */
     private static function mySqlTrigger(Connection $connection, string $name, string $table, string $event): array
     {
-        $created = self::rows($connection, 'show create trigger `'.str_replace('`', '``', $name).'`')[0]
-            ?? throw new UnexpectedValueException('Model Cache read no definition of trigger '.json_encode($name));
+        $created = self::rows($connection, 'show create trigger `'.str_replace('`', '``', $name).'`')[0] ?? throw new UnexpectedValueException('Model Cache read no definition of trigger '.json_encode($name));
 
         return [
             'name' => $name,
@@ -517,26 +516,20 @@ final class DependentTables
             static fn (Token $token): bool => ! $token->isTrivia(),
         ));
 
-        foreach ($tokens as $position => $token) {
-            if (! $token->isKeyword('INSERT', 'UPDATE', 'DELETE')) {
-                continue;
-            }
+        $position = array_key_first(array_filter($tokens, static fn (Token $token): bool => $token->isKeyword('INSERT', 'UPDATE', 'DELETE'))) ?? throw new UnexpectedValueException('Model Cache cannot read the event of trigger '.json_encode($sql));
 
-            if (! $token->isKeyword('UPDATE') || ($tokens[$position + 1] ?? null)?->isKeyword('OF') !== true) {
-                return [[self::event($token->value)], null];
-            }
-
-            $columns = [];
-            for ($column = $position + 2; isset($tokens[$column]) && ! $tokens[$column]->isKeyword('ON'); $column++) {
-                if ($tokens[$column]->isWord()) {
-                    $columns[] = Write::columnName($tokens[$column]->value);
-                }
-            }
-
-            return [[TriggerEvent::Update], $columns];
+        if (! $tokens[$position]->isKeyword('UPDATE') || ($tokens[$position + 1] ?? null)?->isKeyword('OF') !== true) {
+            return [[self::event($tokens[$position]->value)], null];
         }
 
-        throw new UnexpectedValueException('Model Cache cannot read the event of trigger '.json_encode($sql));
+        $columns = [];
+        for ($column = $position + 2; isset($tokens[$column]) && ! $tokens[$column]->isKeyword('ON'); $column++) {
+            if ($tokens[$column]->isWord()) {
+                $columns[] = Write::columnName($tokens[$column]->value);
+            }
+        }
+
+        return [[TriggerEvent::Update], $columns];
     }
 
     /**
@@ -565,7 +558,6 @@ final class DependentTables
             'INSERT' => TriggerEvent::Insert,
             'UPDATE' => TriggerEvent::Update,
             'DELETE' => TriggerEvent::Delete,
-            'TRUNCATE' => TriggerEvent::Truncate,
             default => throw new UnexpectedValueException('Unknown trigger event '.json_encode($event)),
         };
     }

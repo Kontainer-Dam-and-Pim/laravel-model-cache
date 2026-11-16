@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache\Tests\Unit;
 
+use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -26,12 +27,7 @@ class QueryHandlerTest extends TestCase
     {
         parent::getEnvironmentSetUp($app);
 
-        $app['config']->set('database.redis.unreachable', [
-            'host' => '127.0.0.1',
-            'port' => 1,
-            'timeout' => 0.2,
-            'read_write_timeout' => 0.2,
-        ]);
+        $app['config']->set('database.connections.secondary', $app['config']->get('database.connections.'.$app['config']->get('database.default')));
     }
 
     protected function setUp(): void
@@ -190,6 +186,84 @@ class QueryHandlerTest extends TestCase
         $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'y']);
 
         Log::shouldHaveReceived('error')->twice();
+    }
+
+    public function testPretendedWriteKeepsCachedReads(): void
+    {
+        $handler = new QueryHandler($this->cache);
+        $handler->cacheQuery(DB::table('cars'), fn (): array => [['id' => 1, 'name' => 'cached']]);
+
+        DB::pretend(fn () => $handler->invalidateQuery(DB::table('cars'), 'update', Write::update(['name']), ['name' => 'pretended']));
+
+        $this->assertSame([['id' => 1, 'name' => 'cached']], $handler->cacheQuery(DB::table('cars'), fn (): array => [['id' => 1, 'name' => 'fresh']]));
+    }
+
+    public function testReadThatCannotBeAnalyzedRunsAgainstTheDatabaseAndIsReported(): void
+    {
+        Log::spy();
+        $handler = new QueryHandler($this->cache);
+        config(['model-cache.scope' => 'everything']);
+        $executions = 0;
+        $query = function (string $sql) use (&$executions): array {
+            $executions++;
+
+            return [['sql' => $sql]];
+        };
+
+        $first = $handler->cacheQuery(DB::table('cars'), $query);
+        $second = $handler->cacheQuery(DB::table('cars'), $query);
+
+        $this->assertSame([['sql' => DB::table('cars')->toSql()]], $first);
+        $this->assertSame($first, $second);
+        $this->assertSame(2, $executions);
+        Log::shouldHaveReceived('warning')->twice()->withArgs(fn (string $message): bool => str_contains($message, 'analyzing the query'));
+    }
+
+    public function testWriteThatCannotBeAnalyzedInvalidatesEveryCachedRead(): void
+    {
+        Log::spy();
+        $handler = new QueryHandler($this->cache);
+        $handler->cacheQuery(DB::table('drivers'), fn (): array => [['id' => 1, 'name' => 'cached']]);
+
+        config(['model-cache.scope' => 'everything']);
+        $handler->invalidateQuery(DB::table('cars'), 'update', Write::update(['name']), ['name' => 'x']);
+        config(['model-cache.scope' => 'all']);
+
+        $this->assertSame([['id' => 1, 'name' => 'fresh']], $handler->cacheQuery(DB::table('drivers'), fn (): array => [['id' => 1, 'name' => 'fresh']]));
+        Log::shouldHaveReceived('error')->once()->withArgs(fn (string $message): bool => str_contains($message, 'invalidating the cache'));
+    }
+
+    public function testRolledBackSchemaChangeRetiresReadsCachedDuringTheTransaction(): void
+    {
+        $handler = new QueryHandler($this->cache);
+        $connection = DB::connection();
+        $connection->beginTransaction();
+        $handler->schemaChanged($connection);
+        $handler->cacheQuery(DB::connection('secondary')->table('cars'), fn (): array => [['id' => 1, 'name' => 'old schema']]);
+
+        $connection->rollBack();
+        $handler->transactionRolledBack($connection);
+
+        $this->assertSame([['id' => 1, 'name' => 'new schema']], $handler->cacheQuery(DB::connection('secondary')->table('cars'), fn (): array => [['id' => 1, 'name' => 'new schema']]));
+    }
+
+    public function testRowsThatCannotBeStoredAreReturnedAndReported(): void
+    {
+        Log::spy();
+        $handler = new QueryHandler($this->cache);
+        $executions = 0;
+        $query = function () use (&$executions): array {
+            $executions++;
+
+            return [fn (): int => $executions];
+        };
+
+        $first = $handler->cacheQuery(DB::table('cars'), $query);
+        $handler->cacheQuery(DB::table('cars'), $query);
+
+        $this->assertInstanceOf(Closure::class, $first[0]);
+        $this->assertSame(2, $executions);
+        Log::shouldHaveReceived('warning')->twice()->withArgs(fn (string $message): bool => str_contains($message, 'storing in the cache'));
     }
 
     private function handlerWithUnreachableRedis(): QueryHandler

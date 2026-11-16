@@ -37,6 +37,19 @@ class ManagerTest extends TestCase
         $this->assertTrue($manager->shouldCache());
     }
 
+    public function testQueryReadingNoTableIsCachedEvenWhenOnlySomeTablesAreIncluded(): void
+    {
+        config([
+            'model-cache.active' => true,
+            'model-cache.include_tables' => ['cars'],
+            'model-cache.exclude_tables' => [],
+        ]);
+
+        $manager = new Manager(new Reflector(DB::query()->selectRaw('1 as one')));
+
+        $this->assertTrue($manager->shouldCache());
+    }
+
     public function testIncludeTablesRequiresAllTablesToBeIncluded(): void
     {
         config([

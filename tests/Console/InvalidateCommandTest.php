@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache\Tests\Console;
 
+use Illuminate\Database\SQLiteConnection;
 use Illuminate\Support\Facades\DB;
 use Kontainer\ModelCache\Tests\Database\Models\Car;
 use Kontainer\ModelCache\Tests\TestCase;
+use PDO;
 
 final class InvalidateCommandTest extends TestCase
 {
@@ -50,11 +52,7 @@ final class InvalidateCommandTest extends TestCase
 
     public function testFailsWhileRedisRejectsTheInvalidation(): void
     {
-        $this->app['config']->set('database.redis.unreachable', ['host' => '127.0.0.1', 'port' => 1, 'timeout' => 0.2, 'read_write_timeout' => 0.2]);
-        config(['model-cache.redis_connection' => 'unreachable']);
-        foreach (['model-cache.redis', 'model-cache.cache', 'model-cache.handler'] as $binding) {
-            $this->app->forgetInstance($binding);
-        }
+        $this->pointCacheAtUnreachableRedis();
 
         $this->artisan('model-cache:invalidate', ['tables' => ['cars']])
             ->expectsOutput('Redis rejected the invalidation; it is kept and replayed once Redis accepts it.')
@@ -67,6 +65,23 @@ final class InvalidateCommandTest extends TestCase
 
         $this->artisan('model-cache:invalidate', ['tables' => ['cars']])
             ->expectsOutput('Model Cache is disabled. Nothing was invalidated.')
+            ->assertExitCode(1);
+    }
+
+    public function testFailsOnAnUnknownConnection(): void
+    {
+        $this->artisan('model-cache:invalidate', ['tables' => ['cars'], '--connection' => 'missing'])
+            ->expectsOutput('Unknown database connection: Database connection [missing] not configured.')
+            ->assertExitCode(1);
+    }
+
+    public function testFailsOnAConnectionThatDoesNotUseModelCache(): void
+    {
+        config(['database.connections.plain' => ['driver' => 'plain', 'database' => ':memory:', 'prefix' => '']]);
+        DB::extend('plain', static fn (array $config, string $name): SQLiteConnection => new SQLiteConnection(new PDO('sqlite::memory:'), ':memory:', '', $config + ['name' => $name]));
+
+        $this->artisan('model-cache:invalidate', ['tables' => ['cars'], '--connection' => 'plain'])
+            ->expectsOutput('Connection plain does not use Model Cache.')
             ->assertExitCode(1);
     }
 

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Kontainer\ModelCache\CacheMiss;
 use Kontainer\ModelCache\ModelCacheServiceProvider;
+use Kontainer\ModelCache\Services;
 use Kontainer\ModelCache\Support\DependentTables;
 use Orchestra\Testbench\TestCase as BaseTestCase;
 
@@ -63,6 +64,15 @@ class TestCase extends BaseTestCase
         return [
             ModelCacheServiceProvider::class,
         ];
+    }
+
+    protected function pointCacheAtUnreachableRedis(): void
+    {
+        config(['model-cache.redis_connection' => 'unreachable']);
+
+        foreach ([Services::REDIS, Services::CACHE, Services::HANDLER] as $binding) {
+            $this->app->forgetInstance($binding);
+        }
     }
 
     protected static function databaseDriver(): string
@@ -148,5 +158,6 @@ class TestCase extends BaseTestCase
         $app['config']->set('database.redis.default.port', $redisPort);
         $app['config']->set('database.redis.cache.host', $redisHost);
         $app['config']->set('database.redis.cache.port', $redisPort);
+        $app['config']->set('database.redis.unreachable', ['host' => '127.0.0.1', 'port' => 1, 'timeout' => 0.2, 'read_write_timeout' => 0.2]);
     }
 }

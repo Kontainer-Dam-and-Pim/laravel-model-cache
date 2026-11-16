@@ -21,6 +21,16 @@ final class StatsCommandTest extends TestCase
             ->assertExitCode(0);
     }
 
+    public function testRejectsHoursBelowOne(): void
+    {
+        config(['model-cache.metrics' => true]);
+        $this->app->forgetInstance(Services::METRICS);
+
+        $this->artisan('model-cache:stats', ['--hours' => '0'])
+            ->expectsOutput('--hours must be a whole number of 1 or more.')
+            ->assertExitCode(1);
+    }
+
     public function testNothingIsCountedOrWrittenWhileMetricsAreOff(): void
     {
         DB::table('cars')->insert(['id' => 1, 'name' => 'row', 'engine_id' => null, 'driver_id' => null]);

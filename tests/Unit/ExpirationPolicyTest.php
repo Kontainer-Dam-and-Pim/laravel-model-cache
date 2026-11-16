@@ -40,6 +40,16 @@ final class ExpirationPolicyTest extends TestCase
         $this->assertGreaterThanOrEqual(1, min($this->sampleTtls(new ExpirationPolicy(1, 100))));
     }
 
+    public function testNegativeExpirationFailsLoudly(): void
+    {
+        config(['model-cache.expiration_time' => '-1']);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid model-cache.expiration_time -1, expected 0 or more seconds');
+
+        ExpirationPolicy::fromConfig();
+    }
+
     public function testOutOfRangeJitterFailsLoudly(): void
     {
         $this->expectException(InvalidArgumentException::class);

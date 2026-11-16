@@ -24,18 +24,6 @@ use RuntimeException;
 
 final class SoundnessTest extends TestCase
 {
-    protected function getEnvironmentSetUp($app): void
-    {
-        parent::getEnvironmentSetUp($app);
-
-        $app['config']->set('database.redis.unreachable', [
-            'host' => '127.0.0.1',
-            'port' => 1,
-            'timeout' => 0.2,
-            'read_write_timeout' => 0.2,
-        ]);
-    }
-
     public function testTimeDependentQueriesAreNeverCached(): void
     {
         DB::table('cars')->insert(['id' => 1, 'name' => 'row', 'engine_id' => null, 'driver_id' => null]);

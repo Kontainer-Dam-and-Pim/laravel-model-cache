@@ -11,7 +11,6 @@ enum WriteKind
 {
     case Insert;
     case ColumnUpdate;
-    case AnyUpdate;
     case Delete;
     case Truncate;
     case Merge;

@@ -85,14 +85,10 @@ final class Cache
             }
         }
 
-        $reply = $this->redis->evaluate($this->metrics->script(LuaScripts::LOOKUP), [
+        $reply = RedisReply::list($this->redis->evaluate($this->metrics->script(LuaScripts::LOOKUP), [
             ...$arguments,
             ...$this->metrics->scriptArguments($table),
-        ]);
-
-        if (! is_array($reply) || ! isset($reply[0], $reply[1])) {
-            throw new UnexpectedValueException('Malformed Model Cache lookup reply for key '.$key);
-        }
+        ]), 2, 'lookup reply for key '.$key);
 
         if (isset($reply[2])) {
             $rows = $this->encoder->decode(RedisReply::string($reply[2], 'lookup payload'));
@@ -184,11 +180,7 @@ final class Cache
             }
         }
 
-        $reply = $this->redis->evaluate($this->metrics->script(LuaScripts::INVALIDATE), [...$arguments, ...$this->metrics->scriptArguments()], $cooldown);
-
-        if (! is_array($reply) || ! isset($reply[0])) {
-            throw new UnexpectedValueException('Malformed Model Cache invalidation reply');
-        }
+        $reply = RedisReply::list($this->redis->evaluate($this->metrics->script(LuaScripts::INVALIDATE), [...$arguments, ...$this->metrics->scriptArguments()], $cooldown), 1, 'invalidation reply');
 
         if ($reply[0] === 0 || $reply[0] === '0') {
             return ['generation' => null, 'databasesWithUnknownDependents' => []];
@@ -196,10 +188,10 @@ final class Cache
 
         return [
             'generation' => new Generation(RedisReply::string($reply[0], 'invalidation generation')),
-            'databasesWithUnknownDependents' => array_values(array_map(
+            'databasesWithUnknownDependents' => array_map(
                 static fn (mixed $group): string => $databases[RedisReply::integer($group, 'invalidation dependents group') - 1] ?? throw new UnexpectedValueException('Unknown dependents group '.json_encode($group).' in Model Cache invalidation reply'),
                 array_slice($reply, 1),
-            )),
+            ),
         ];
     }
 
@@ -306,11 +298,7 @@ final class Cache
         $deleted = 0;
 
         do {
-            $reply = $this->redis->evaluate(LuaScripts::PRUNE_BATCH, [$cursor, self::PRUNE_BATCH_SIZE]);
-
-            if (! is_array($reply) || ! isset($reply[0], $reply[1])) {
-                throw new UnexpectedValueException('Malformed Model Cache prune reply at cursor '.$cursor);
-            }
+            $reply = RedisReply::list($this->redis->evaluate(LuaScripts::PRUNE_BATCH, [$cursor, self::PRUNE_BATCH_SIZE]), 2, 'prune reply at cursor '.$cursor);
 
             $cursor = RedisReply::string($reply[0], 'prune cursor');
             $deleted += RedisReply::integer($reply[1], 'prune count');

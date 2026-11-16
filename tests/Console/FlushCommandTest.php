@@ -31,4 +31,13 @@ class FlushCommandTest extends TestCase
             ->expectsOutput('Model Cache has been flushed successfully.')
             ->assertExitCode(0);
     }
+
+    public function testFailsWhileRedisIsUnreachable(): void
+    {
+        $this->pointCacheAtUnreachableRedis();
+
+        $this->artisan('model-cache:flush')
+            ->expectsOutputToContain('Failed to flush Model Cache: ')
+            ->assertExitCode(1);
+    }
 }

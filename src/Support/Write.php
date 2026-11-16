@@ -47,11 +47,6 @@ final readonly class Write
         return new self(WriteKind::ColumnUpdate, array_map('strval', array_keys($names)));
     }
 
-    public static function updateOfAnyColumn(): self
-    {
-        return new self(WriteKind::AnyUpdate);
-    }
-
     public static function delete(): self
     {
         return new self(WriteKind::Delete);
@@ -128,7 +123,6 @@ final readonly class Write
         $rowFields = $this->changesRows ? match ($this->kind) {
             WriteKind::Insert => [],
             WriteKind::ColumnUpdate => array_map(static fn (string $column): string => self::columnUpdateField($table, $column), $this->columns),
-            WriteKind::AnyUpdate => [self::anyUpdateField($table)],
             WriteKind::Delete => $this->deletedKeys !== null && $this->deletedKeys['table'] === $table ? [] : [self::deleteField($table)],
             WriteKind::Truncate => [self::truncateField($table)],
             WriteKind::Merge => [self::deleteField($table), self::anyUpdateField($table)],
@@ -141,7 +135,6 @@ final readonly class Write
                 self::triggerField(TriggerEvent::Update, $table),
                 ...array_map(static fn (string $column): string => self::columnTriggerField($table, $column), $this->columns),
             ],
-            WriteKind::AnyUpdate => [self::triggerField(TriggerEvent::Update, $table), self::anyColumnTriggerField($table)],
             WriteKind::Delete => [self::triggerField(TriggerEvent::Delete, $table)],
             WriteKind::Truncate => [self::triggerField(TriggerEvent::Truncate, $table), self::triggerField(TriggerEvent::Delete, $table)],
             WriteKind::Merge => [

@@ -7,10 +7,8 @@ namespace Kontainer\ModelCache\Database;
 use Illuminate\Contracts\Database\Query\Expression as ExpressionContract;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\JoinClause as BaseJoinClause;
 use Kontainer\ModelCache\QueryHandler;
-use LogicException;
 
 /**
  * Model Cache-aware join clause.
@@ -22,7 +20,12 @@ class JoinClause extends BaseJoinClause implements HasCompiledSubQueries
 {
     use TracksCompiledSubQueries;
 
-    private readonly ?QueryHandler $parentHandler;
+    /** @var class-string<QueryBuilder> */
+    private readonly string $parentBuilderClass;
+
+    private readonly Connection $parentDatabaseConnection;
+
+    private readonly QueryHandler $parentHandler;
 
     private readonly ?Model $parentModel;
 
@@ -32,16 +35,12 @@ class JoinClause extends BaseJoinClause implements HasCompiledSubQueries
      * @param  string  $type
      * @param  ExpressionContract|string  $table
      */
-    public function __construct(Builder $parentQuery, $type, $table)
+    public function __construct(QueryBuilder $parentQuery, $type, $table)
     {
-        // Capture QueryBuilder-specific dependencies before parent constructor runs
-        if ($parentQuery instanceof QueryBuilder) {
-            $this->parentHandler = $parentQuery->getHandler();
-            $this->parentModel = $parentQuery->getModel();
-        } else {
-            $this->parentHandler = null;
-            $this->parentModel = null;
-        }
+        $this->parentBuilderClass = $parentQuery::class;
+        $this->parentDatabaseConnection = $parentQuery->getConnection();
+        $this->parentHandler = $parentQuery->getHandler();
+        $this->parentModel = $parentQuery->getModel();
 
         parent::__construct($parentQuery, $type, $table);
     }
@@ -49,20 +48,8 @@ class JoinClause extends BaseJoinClause implements HasCompiledSubQueries
     /** {@inheritDoc} */
     protected function newParentQuery()
     {
-        $class = $this->parentClass;
-
-        if ($this->parentHandler === null) {
-            return is_a($class, Builder::class, true)
-                ? new $class($this->parentConnection, $this->parentGrammar, $this->parentProcessor)
-                : throw new LogicException('Join clause parent '.$class.' is not a query builder');
-        }
-
-        if (! is_a($class, QueryBuilder::class, true) || ! $this->parentConnection instanceof Connection) {
-            throw new LogicException('Join clause parent '.$class.' carries a Model Cache handler but is not a Model Cache query builder on a database connection');
-        }
-
-        return new $class(
-            $this->parentConnection,
+        return new $this->parentBuilderClass(
+            $this->parentDatabaseConnection,
             $this->parentHandler,
             $this->parentGrammar,
             $this->parentProcessor,

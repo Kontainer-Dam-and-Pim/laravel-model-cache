@@ -11,6 +11,7 @@ use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\JoinClause;
 use Kontainer\ModelCache\Database\HasCompiledSubQueries;
 use Kontainer\ModelCache\Support\Sql\Dialects;
+use UnexpectedValueException;
 
 /**
  * Utility to extract table names (as strings) from a Laravel Query Builder.
@@ -33,10 +34,7 @@ final class TableExtractor
             $tables = array_merge($tables, self::expressionTables($builder, $from));
         }
 
-        foreach ($builder->joins ?? [] as $join) {
-            if (! ($join instanceof JoinClause)) {
-                continue;
-            }
+        foreach (self::joinClauses($builder) as $join) {
             if (is_string($join->table)) {
                 $tables[] = SqlAliasParser::stripAlias($join->table);
             } elseif ($join->table instanceof Expression) {
@@ -59,6 +57,17 @@ final class TableExtractor
         }
 
         return array_values(array_unique($tables));
+    }
+
+    /**
+     * @return list<JoinClause>
+     */
+    public static function joinClauses(BaseBuilder $builder): array
+    {
+        return array_map(
+            static fn (mixed $join): JoinClause => $join instanceof JoinClause ? $join : throw new UnexpectedValueException('Model Cache reads joins of the query builder as join clauses, got '.get_debug_type($join)),
+            array_values($builder->joins ?? []),
+        );
     }
 
     /**

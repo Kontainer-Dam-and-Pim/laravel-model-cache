@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Kontainer\ModelCache\Tests\Unit;
 
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use Kontainer\ModelCache\Reflector;
 use Kontainer\ModelCache\Tests\TestCase;
 
@@ -118,11 +119,12 @@ class ReflectorTest extends TestCase
         $this->assertSame(Reflector::QUERY_TYPE_INSERT, $r->getType());
     }
 
-    public function testGetSqlForInsertGetId(): void
+    public function testRejectsUnknownQueryTypes(): void
     {
-        $b = DB::table('cars');
-        $r = new Reflector($b, 'insertgetid', ['name' => 'c']);
-        $this->assertNotSame('', $r->getSql());
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Unknown Model Cache query type "insertgetid"');
+
+        new Reflector(DB::table('cars'), 'insertgetid', ['name' => 'c']);
     }
 
     public function testGetSqlAndTypeForUpdate(): void

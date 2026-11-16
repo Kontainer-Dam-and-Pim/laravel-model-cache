@@ -24,12 +24,6 @@ final class RuntimeModesTest extends TestCase
     {
         parent::getEnvironmentSetUp($app);
 
-        $app['config']->set('database.redis.unreachable', [
-            'host' => '127.0.0.1',
-            'port' => 1,
-            'timeout' => 0.2,
-            'read_write_timeout' => 0.2,
-        ]);
         $app['config']->set('database.connections.unopened', [
             'driver' => 'sqlite',
             'database' => '/nonexistent-directory/database.sqlite',

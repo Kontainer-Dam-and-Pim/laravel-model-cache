@@ -6,7 +6,6 @@ namespace Kontainer\ModelCache\Support;
 
 use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Expression;
-use Illuminate\Database\Query\JoinClause;
 use Kontainer\ModelCache\Database\QueryBuilder;
 use UnexpectedValueException;
 
@@ -244,10 +243,7 @@ final class RowExtractor
             }
         }
 
-        foreach ($builder->joins ?? [] as $join) {
-            if (! ($join instanceof JoinClause)) {
-                continue;
-            }
+        foreach (TableExtractor::joinClauses($builder) as $join) {
             if (is_string($join->table)) {
                 $alias = SqlAliasParser::extractAlias($join->table);
                 if ($alias !== null) {

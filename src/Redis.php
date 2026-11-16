@@ -15,7 +15,6 @@ use Predis\ClientInterface as PredisClientInterface;
 use Predis\Command\Processor\KeyPrefixProcessor;
 use Predis\Response\ServerException;
 use Redis as PhpRedisClient;
-use RedisCluster;
 use RuntimeException;
 use Throwable;
 
@@ -101,12 +100,6 @@ final class Redis
             throw $exception;
         }
 
-        if ($result === false) {
-            $this->availability->markUnavailable();
-
-            throw new RuntimeException('Redis rejected the Model Cache script '.LuaScripts::nameOf($script).': '.$this->lastClientError());
-        }
-
         $this->availability->markAvailable();
 
         return $result;
@@ -121,17 +114,7 @@ final class Redis
         $sha = self::$shas[$script] ??= sha1($script);
 
         if ($connection instanceof PhpRedisConnection) {
-            $client = self::phpRedisClient($connection);
-            $client->clearLastError();
-            $result = $connection->command('evalsha', [$sha, $arguments, 0]);
-
-            if ($result === false && str_starts_with($client->getLastError() ?? '', 'NOSCRIPT')) {
-                $client->clearLastError();
-
-                return $connection->command('eval', [$script, $arguments, 0]);
-            }
-
-            return $result;
+            return self::runOnPhpRedis($connection, $script, $sha, $arguments);
         }
 
         try {
@@ -143,6 +126,27 @@ final class Redis
 
             return $connection->command('eval', [$script, 0, ...$arguments]);
         }
+    }
+
+    /**
+     * @param  list<string|int>  $arguments
+     */
+    private static function runOnPhpRedis(PhpRedisConnection $connection, string $script, string $sha, array $arguments): mixed
+    {
+        $client = self::phpRedisClient($connection);
+        $client->clearLastError();
+        $result = $connection->command('evalsha', [$sha, $arguments, 0]);
+
+        if ($result === false && str_starts_with($client->getLastError() ?? '', 'NOSCRIPT')) {
+            $client->clearLastError();
+            $result = $connection->command('eval', [$script, $arguments, 0]);
+        }
+
+        if ($result === false) {
+            throw new RuntimeException('Redis rejected the Model Cache script '.LuaScripts::nameOf($script).': '.($client->getLastError() ?? 'the reply was false and the client reports no error'));
+        }
+
+        return $result;
     }
 
     /**
@@ -169,23 +173,18 @@ final class Redis
         };
     }
 
-    private function lastClientError(): string
-    {
-        $connection = $this->connection;
-
-        return $connection instanceof PhpRedisConnection
-            ? (self::phpRedisClient($connection)->getLastError() ?? 'the reply was false and the client reports no error')
-            : 'the reply was false';
-    }
-
-    private static function phpRedisClient(PhpRedisConnection $connection): PhpRedisClient|RedisCluster
+    private static function phpRedisClient(PhpRedisConnection $connection): PhpRedisClient
     {
         $client = $connection->client();
 
-        return $client instanceof PhpRedisClient || $client instanceof RedisCluster ? $client : throw new RuntimeException('Model Cache supports phpredis connections backed by a Redis or RedisCluster client, got '.get_debug_type($client));
+        if (! $client instanceof PhpRedisClient) {
+            throw new RuntimeException('Model Cache supports phpredis connections backed by a Redis client, got '.get_debug_type($client));
+        }
+
+        return $client;
     }
 
-    private static function phpRedisPrefix(PhpRedisClient|RedisCluster $client): string
+    private static function phpRedisPrefix(PhpRedisClient $client): string
     {
         $prefix = $client->getOption(PhpRedisClient::OPT_PREFIX);
 

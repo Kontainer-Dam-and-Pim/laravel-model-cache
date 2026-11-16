@@ -6,8 +6,6 @@ namespace Kontainer\ModelCache\Support;
 
 use APCUIterator;
 use Closure;
-use RuntimeException;
-use UnexpectedValueException;
 
 /**
  * Invalidations that could not reach Redis, kept until Redis accepts them again.
@@ -81,15 +79,11 @@ final class FailedInvalidations
                 $sharedKeys[] = $this->everythingKey();
             }
 
-            foreach (new APCUIterator('/^'.preg_quote($this->itemPrefix(), '/').'/') as $item) {
-                if (! is_array($item) || ! is_string($item['key'] ?? null)) {
-                    throw new UnexpectedValueException('APCu iterator returned an item without a key: '.get_debug_type($item));
-                }
-
-                $value = $item['value'] ?? null;
+            foreach (new APCUIterator('/^'.preg_quote($this->itemPrefix(), '/').'/', APC_ITER_VALUE) as $key => $item) {
+                $value = is_array($item) ? $item['value'] ?? null : null;
                 $invalidation = is_string($value) ? @unserialize($value, ['allowed_classes' => [Invalidation::class]]) : null;
                 $merged = self::bounded($merged->merge($invalidation instanceof Invalidation ? $invalidation : Invalidation::everything()));
-                $sharedKeys[] = $item['key'];
+                $sharedKeys[] = $key;
             }
         }
 
@@ -110,13 +104,12 @@ final class FailedInvalidations
         apcu_add($this->counterKey(), 0);
         $pending = (int) apcu_inc($this->counterKey());
 
-        $kept = $invalidation->retires !== null || $pending > self::MAX_PENDING
-            ? apcu_store($this->everythingKey(), true, $this->ttlSeconds)
-            : apcu_store($this->itemPrefix().bin2hex(random_bytes(8)), serialize($invalidation), $this->ttlSeconds)
-                || apcu_store($this->everythingKey(), true, $this->ttlSeconds);
+        $itemStored = $invalidation->retires === null
+            && $pending <= self::MAX_PENDING
+            && apcu_store($this->itemPrefix().bin2hex(random_bytes(8)), serialize($invalidation), $this->ttlSeconds);
 
-        if (! $kept) {
-            FailureReporter::report(CacheOperation::Invalidate, new RuntimeException('APCu is full, so other PHP-FPM requests cannot replay this failed invalidation'));
+        if (! $itemStored) {
+            apcu_store($this->everythingKey(), true, $this->ttlSeconds);
         }
     }
 

@@ -39,10 +39,6 @@ final class RowKeys
             $keys[$key] = true;
         }
 
-        if (count($keys) > self::MAX_PER_TABLE) {
-            return null;
-        }
-
         $canonical = array_map('strval', array_keys($keys));
         sort($canonical, SORT_STRING);
 

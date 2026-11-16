@@ -13,18 +13,6 @@ use Kontainer\ModelCache\Tests\TestCase;
 
 final class DegradedModeTest extends TestCase
 {
-    protected function getEnvironmentSetUp($app): void
-    {
-        parent::getEnvironmentSetUp($app);
-
-        $app['config']->set('database.redis.unreachable', [
-            'host' => '127.0.0.1',
-            'port' => 1,
-            'timeout' => 0.2,
-            'read_write_timeout' => 0.2,
-        ]);
-    }
-
     public function testModelsAndQueryBuilderWorkWhileRedisIsUnreachable(): void
     {
         $this->pointCacheAtUnreachableRedis();
@@ -81,14 +69,5 @@ final class DegradedModeTest extends TestCase
         $this->assertNotInstanceOf(QueryBuilder::class, DB::table('cars'));
         $this->assertSame('plain', Car::query()->find(1)?->name);
         Log::shouldHaveReceived('error')->once();
-    }
-
-    private function pointCacheAtUnreachableRedis(): void
-    {
-        config(['model-cache.redis_connection' => 'unreachable']);
-
-        foreach (['model-cache.redis', 'model-cache.cache', 'model-cache.handler'] as $binding) {
-            $this->app->forgetInstance($binding);
-        }
     }
 }

@@ -125,12 +125,7 @@ final class QueryHandler
     public function invalidateTables(Connection $connection, array $tables, Write $write): void
     {
         foreach ($tables as $table) {
-            $builder = $connection->query()->from($table);
-
-            if (! $builder instanceof QueryBuilder) {
-                return;
-            }
-
+            $builder = (new QueryBuilder($connection, $this, $connection->getQueryGrammar(), $connection->getPostProcessor()))->from($table);
             $this->invalidateQuery($builder, Reflector::QUERY_TYPE_TRUNCATE, $write);
         }
     }

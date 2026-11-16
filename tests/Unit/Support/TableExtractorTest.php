@@ -7,6 +7,7 @@ namespace Kontainer\ModelCache\Tests\Unit\Support;
 use Illuminate\Support\Facades\DB;
 use Kontainer\ModelCache\Support\TableExtractor;
 use Kontainer\ModelCache\Tests\TestCase;
+use UnexpectedValueException;
 
 class TableExtractorTest extends TestCase
 {
@@ -55,5 +56,16 @@ class TableExtractorTest extends TestCase
 
         $this->assertContains('cars', $tables);
         $this->assertContains('materials', $tables);
+    }
+
+    public function testJoinsThatAreNoJoinClausesFailLoudly(): void
+    {
+        $b = DB::table('cars');
+        $b->joins = ['drivers'];
+
+        $this->expectException(UnexpectedValueException::class);
+        $this->expectExceptionMessage('Model Cache reads joins of the query builder as join clauses, got string');
+
+        TableExtractor::extractTables($b);
     }
 }

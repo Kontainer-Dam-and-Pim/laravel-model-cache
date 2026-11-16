@@ -134,7 +134,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
      */
     protected function newJoinClause(Builder $parentQuery, $type, $table)
     {
-        return new JoinClause($parentQuery, $type, $table);
+        return new JoinClause($this, $type, $table);
     }
 
     /**

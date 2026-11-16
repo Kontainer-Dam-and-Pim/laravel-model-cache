@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache;
 
+use InvalidArgumentException;
 use Kontainer\ModelCache\Database\QueryBuilder;
 use Kontainer\ModelCache\Support\RowExtractor;
 use Kontainer\ModelCache\Support\Sql\Dialect;
@@ -11,7 +12,6 @@ use Kontainer\ModelCache\Support\Sql\Dialects;
 use Kontainer\ModelCache\Support\SqlTableScanner;
 use Kontainer\ModelCache\Support\TableExtractor;
 use Kontainer\ModelCache\Support\Transactions;
-use RuntimeException;
 
 /**
  * Reflects an underlying Laravel Query Builder to extract metadata and SQL.
@@ -37,7 +37,13 @@ final class Reflector
 
     public const string QUERY_TYPE_TRUNCATE = 'truncate';
 
-    private readonly string $sqlOperation;
+    private const array QUERY_TYPES = [
+        self::QUERY_TYPE_SELECT,
+        self::QUERY_TYPE_INSERT,
+        self::QUERY_TYPE_UPDATE,
+        self::QUERY_TYPE_DELETE,
+        self::QUERY_TYPE_TRUNCATE,
+    ];
 
     private ?string $sql = null;
 
@@ -58,10 +64,12 @@ final class Reflector
      */
     public function __construct(
         private readonly QueryBuilder $queryBuilder,
-        string $sqlOperation = self::QUERY_TYPE_SELECT,
+        private readonly string $sqlOperation = self::QUERY_TYPE_SELECT,
         private readonly array $values = [],
     ) {
-        $this->sqlOperation = strtolower($sqlOperation);
+        if (! in_array($sqlOperation, self::QUERY_TYPES, true)) {
+            throw new InvalidArgumentException(sprintf('Unknown Model Cache query type "%s", expected one of: %s', $sqlOperation, implode(', ', self::QUERY_TYPES)));
+        }
     }
 
     public function getDatabase(): string
@@ -152,28 +160,7 @@ final class Reflector
 
     public function getType(): string
     {
-        // Prefer the declared operation when set to a known type.
-        $valid = [
-            self::QUERY_TYPE_SELECT,
-            self::QUERY_TYPE_INSERT,
-            self::QUERY_TYPE_UPDATE,
-            self::QUERY_TYPE_DELETE,
-            self::QUERY_TYPE_TRUNCATE,
-        ];
-
-        if (in_array($this->sqlOperation, $valid, true)) {
-            return $this->sqlOperation;
-        }
-
-        // Fallback: derive type from compiled SQL when operation is unspecified/custom
-        $sql = strtolower(trim($this->getSql()));
-        $type = preg_replace('/[^a-z]/i', '', strtok($sql, ' ') ?: '');
-
-        if (! in_array($type, $valid, true)) {
-            throw new RuntimeException("Invalid query type detected: {$type}");
-        }
-
-        return $type;
+        return $this->sqlOperation;
     }
 
     public function getSql(): string
@@ -187,7 +174,6 @@ final class Reflector
 
         $sql = match ($this->sqlOperation) {
             self::QUERY_TYPE_INSERT => $grammar->compileInsert($this->queryBuilder, $this->values),
-            'insertgetid' => $grammar->compileInsertGetId($this->queryBuilder, $this->values, null),
             self::QUERY_TYPE_UPDATE => $grammar->compileUpdate($this->queryBuilder, $this->values),
             self::QUERY_TYPE_DELETE => $grammar->compileDelete($this->queryBuilder),
             self::QUERY_TYPE_TRUNCATE => $grammar->compileTruncate($this->queryBuilder),

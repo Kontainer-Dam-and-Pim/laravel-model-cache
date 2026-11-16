@@ -18,6 +18,7 @@ use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
 use Kontainer\ModelCache\Tests\Concerns\RecordsRedisCommands;
 use Kontainer\ModelCache\Tests\Database\Models\License;
 use Kontainer\ModelCache\Tests\TestCase;
+use RuntimeException;
 
 final class DependentTablesTest extends TestCase
 {
@@ -741,6 +742,87 @@ final class DependentTablesTest extends TestCase
         $this->assertCacheHas($twoKey, $twoTags, 'Only the uses of the deleted rate change');
     }
 
+    public function testDeletingAParentRefreshesCachedReadsOfChildrenSetToTheirDefault(): void
+    {
+        $this->requireDatabaseDriver('sqlite', 'pgsql');
+        Schema::create('owner_badges', static function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('owner_id')->default(2)->constrained('owners')->onDelete('set default');
+        });
+        DB::table('owner_badges')->insert(['id' => 1, 'owner_id' => 1]);
+        $this->loadDependencyMap();
+        $this->assertSame(1, (int) DB::table('owner_badges')->where('id', 1)->value('owner_id'));
+
+        DB::table('owners')->where('id', 1)->delete();
+
+        $this->assertSame(2, (int) DB::table('owner_badges')->where('id', 1)->value('owner_id'));
+    }
+
+    public function testInsertsRefreshCachedReadsOfTablesTheirTriggersUpdate(): void
+    {
+        $this->createTrigger('drivers_rename_materials', 'insert', 'drivers', 'update materials set name = new.name');
+        DB::table('materials')->insert(['id' => 1, 'name' => 'steel']);
+        $this->assertSame('steel', DB::table('materials')->where('id', 1)->value('name'));
+
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'alice']);
+
+        $this->assertSame('alice', DB::table('materials')->where('id', 1)->value('name'));
+    }
+
+    public function testDeletesRefreshCachedReadsOfTablesTheirTriggersDeleteFrom(): void
+    {
+        $this->createTrigger('drivers_purge_materials', 'delete', 'drivers', 'delete from materials where name = old.name');
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'alice']);
+        DB::table('materials')->insert([['id' => 1, 'name' => 'alice'], ['id' => 2, 'name' => 'bob']]);
+        $this->assertSame(2, DB::table('materials')->count());
+
+        DB::table('drivers')->where('id', 1)->delete();
+
+        $this->assertSame(1, DB::table('materials')->count());
+    }
+
+    public function testInsertsRefreshCachedReadsOfTablesTheirTriggersTruncate(): void
+    {
+        $this->requireDatabaseDriver('pgsql');
+        $this->createTrigger('drivers_reset_materials', 'insert', 'drivers', 'truncate materials');
+        DB::table('materials')->insert(['id' => 1, 'name' => 'steel']);
+        $this->assertSame(1, DB::table('materials')->count());
+
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'alice']);
+
+        $this->assertSame(0, DB::table('materials')->count());
+    }
+
+    public function testUpdatesRefreshCachedReadsOfTablesWrittenByTriggersOfTheColumnsTheyAssignOnly(): void
+    {
+        $this->requireDatabaseDriver('sqlite');
+        DB::unprepared('create trigger drivers_log_rename after update of "name", created_at on drivers begin insert into materials (name) values (new.name); end');
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'alice']);
+        $this->loadDependencyMap();
+        $this->assertSame(['materials'], DependentTables::load(DB::connection())['gc:drivers:name']);
+        $this->assertSame([], DB::table('materials')->pluck('name')->all());
+        [$materialsKey, $materialsTags] = $this->cacheKeyAndTags(DB::table('materials')->select('name'));
+
+        DB::table('drivers')->where('id', 1)->update(['updated_at' => '2026-01-01 00:00:00']);
+
+        $this->assertCacheHas($materialsKey, $materialsTags, 'The trigger fires on updates of name and created_at only');
+
+        DB::table('drivers')->where('id', 1)->update(['name' => 'renamed']);
+
+        $this->assertSame(['renamed'], DB::table('materials')->pluck('name')->all());
+    }
+
+    public function testAForeignKeyWhoseReferencedColumnCannotBeToldLeavesTheSchemaUnreadable(): void
+    {
+        $this->requireDatabaseDriver('sqlite');
+        DB::unprepared('create table tallies (label text); create table tally_marks (id integer primary key, tally_label text references tallies)');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Model Cache cannot tell which column of tallies the foreign key of tally_marks on tally_label references');
+
+        DependentTables::load(DB::connection());
+    }
+
     /**
      * PostgreSQL rejects a value of another type instead of casting it, and MySQL does so for
      * writes in strict mode.
@@ -752,6 +834,17 @@ final class DependentTablesTest extends TestCase
         if (self::databaseDriver() !== 'sqlite') {
             DB::statement("set session sql_mode = ''");
         }
+    }
+
+    private function createTrigger(string $name, string $event, string $table, string $body): void
+    {
+        DB::unprepared(match (self::databaseDriver()) {
+            'sqlite' => "create trigger {$name} after {$event} on {$table} begin {$body}; end",
+            'mysql', 'mariadb' => "create trigger {$name} after {$event} on {$table} for each row {$body}",
+            'pgsql' => "create or replace function {$name}() returns trigger as \$\$ begin {$body}; return null; end; \$\$ language plpgsql;"
+                ." create trigger {$name} after {$event} on {$table} for each row execute function {$name}()",
+        });
+        $this->loadDependencyMap();
     }
 
     private function countInDatabase(string $sql): int

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache\Tests\Unit\Support;
 
+use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Facades\DB;
 use Kontainer\ModelCache\Support\RowExtractor;
 use Kontainer\ModelCache\Tests\TestCase;
@@ -82,5 +83,20 @@ class RowExtractorTest extends TestCase
         $rows = RowExtractor::extractRows($b);
 
         $this->assertSame([], $rows);
+    }
+
+    public function testColumnPinsOfJoinedQueriesNeedQualifiedColumns(): void
+    {
+        $b = DB::table('cars')->join('drivers', 'drivers.id', '=', 'cars.driver_id')->where('name', 'x')->where('cars.driver_id', 3);
+
+        $this->assertSame(['cars' => ['driver_id' => [3]]], RowExtractor::extractColumnPins($b));
+    }
+
+    public function testWheresOnNumericExpressionsPinNothing(): void
+    {
+        $b = DB::table('cars')->where(new Expression(1), '=', 1);
+
+        $this->assertSame([], RowExtractor::extractRows($b));
+        $this->assertSame([], RowExtractor::extractColumnPins($b));
     }
 }
