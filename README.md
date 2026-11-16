@@ -206,7 +206,12 @@ An invalid value, such as an unknown `scope` or a negative `expiration_time`, di
 **No stale reads after a write.** Every tag has a random version token. A read captures its tags' tokens before querying the database and stores the result under their fingerprint. A write replaces the tokens of the tags it affects. A result read before a concurrent write therefore becomes unreachable rather than stale. Lookups, stores and invalidations are each a single atomic Lua script.
 
 ```mermaid
-%%{init: {"sequence": {"mirrorActors": false}}}%%
+---
+config:
+  themeCSS: "rect.actor, rect.note, rect.rect { filter: none !important; }"
+  sequence:
+    mirrorActors: false
+---
 sequenceDiagram
     autonumber
     participant A as Read in worker A
