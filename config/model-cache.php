@@ -1,37 +1,37 @@
 <?php
 
-use Spiritix\LadaCache\CacheScope;
-use Spiritix\LadaCache\EntrySizeLimit;
-use Spiritix\LadaCache\ExpirationPolicy;
-use Spiritix\LadaCache\Metrics;
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Support\ReplicaReads;
+use Kontainer\ModelCache\CacheScope;
+use Kontainer\ModelCache\EntrySizeLimit;
+use Kontainer\ModelCache\ExpirationPolicy;
+use Kontainer\ModelCache\Metrics;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Support\ReplicaReads;
 
 return [
 
     /*
     |--------------------------------------------------------------------------
-    | Enable or Disable Lada Cache
+    | Enable or Disable Model Cache
     |--------------------------------------------------------------------------
     |
-    | By setting this value to false, Lada Cache will be completely disabled.
+    | By setting this value to false, Model Cache will be completely disabled.
     | This can be useful during debugging, development, or when temporarily
     | troubleshooting cache-related behavior.
     |
     */
-    'active' => env('LADA_CACHE_ACTIVE', true),
+    'active' => env('MODEL_CACHE_ACTIVE', true),
 
     /*
     |--------------------------------------------------------------------------
     | Cache Driver
     |--------------------------------------------------------------------------
     |
-    | The cache driver that should be used for storing Lada Cache entries.
+    | The cache driver that should be used for storing Model Cache entries.
     | By default, Redis is used since it provides excellent performance for
     | tagged and granular cache invalidation.
     |
     */
-    'driver' => env('LADA_CACHE_DRIVER', 'redis'),
+    'driver' => env('MODEL_CACHE_DRIVER', 'redis'),
 
     /*
     |--------------------------------------------------------------------------
@@ -39,12 +39,12 @@ return [
     |--------------------------------------------------------------------------
     |
     | Choose which Redis connection (as defined in config/database.php -> redis)
-    | Lada Cache should use. This allows isolating Lada Cache from your default
+    | Model Cache should use. This allows isolating Model Cache from your default
     | Redis connection. Typically you can set this to 'cache' or define a
-    | dedicated 'lada-cache' connection.
+    | dedicated 'model-cache' connection.
     |
     */
-    'redis_connection' => env('LADA_CACHE_REDIS_CONNECTION', Redis::DEFAULT_CONNECTION),
+    'redis_connection' => env('MODEL_CACHE_REDIS_CONNECTION', Redis::DEFAULT_CONNECTION),
 
     /*
     |--------------------------------------------------------------------------
@@ -57,7 +57,7 @@ return [
     | previously cached entries inaccessible.
     |
     */
-    'prefix' => env('LADA_CACHE_PREFIX', Redis::DEFAULT_PREFIX),
+    'prefix' => env('MODEL_CACHE_PREFIX', Redis::DEFAULT_PREFIX),
 
     /*
     |--------------------------------------------------------------------------
@@ -70,7 +70,7 @@ return [
     | keep entries until the cache generation is retired.
     |
     */
-    'expiration_time' => env('LADA_CACHE_EXPIRATION', ExpirationPolicy::DEFAULT_SECONDS),
+    'expiration_time' => env('MODEL_CACHE_EXPIRATION', ExpirationPolicy::DEFAULT_SECONDS),
 
     /*
     |--------------------------------------------------------------------------
@@ -83,7 +83,7 @@ return [
     | to expire every entry after exactly the configured time.
     |
     */
-    'expiration_jitter' => env('LADA_CACHE_EXPIRATION_JITTER', ExpirationPolicy::DEFAULT_JITTER_PERCENT),
+    'expiration_jitter' => env('MODEL_CACHE_EXPIRATION_JITTER', ExpirationPolicy::DEFAULT_JITTER_PERCENT),
 
     /*
     |--------------------------------------------------------------------------
@@ -95,7 +95,7 @@ return [
     | the query again and blocks Redis while it happens. Set to 0 for no limit.
     |
     */
-    'max_entry_size' => env('LADA_CACHE_MAX_ENTRY_SIZE', EntrySizeLimit::DEFAULT_BYTES),
+    'max_entry_size' => env('MODEL_CACHE_MAX_ENTRY_SIZE', EntrySizeLimit::DEFAULT_BYTES),
 
     /*
     |--------------------------------------------------------------------------
@@ -109,7 +109,7 @@ return [
     | yet. Set it to the replication lag you want to tolerate.
     |
     */
-    'replica_lag' => env('LADA_CACHE_REPLICA_LAG', ReplicaReads::DEFAULT_LAG_SECONDS),
+    'replica_lag' => env('MODEL_CACHE_REPLICA_LAG', ReplicaReads::DEFAULT_LAG_SECONDS),
 
     /*
     |--------------------------------------------------------------------------
@@ -137,11 +137,11 @@ return [
     | but may produce more Redis keys.
     |
     | If you experience issues or performance degradation, set this to false
-    | to reduce granularity. This tells Lada Cache to ignore row-level keys
+    | to reduce granularity. This tells Model Cache to ignore row-level keys
     | and cache results at a broader level.
     |
     */
-    'consider_rows' => env('LADA_CACHE_CONSIDER_ROWS', true),
+    'consider_rows' => env('MODEL_CACHE_CONSIDER_ROWS', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -150,14 +150,14 @@ return [
     |
     | Determines which reads are cached.
     |
-    | "all":    every query on a Lada connection is cached, including
-    |           DB::table() queries and models without LadaCacheTrait.
-    | "models": only queries issued by models using LadaCacheTrait are
+    | "all":    every query on a caching connection is cached, including
+    |           DB::table() queries and models without ModelCacheTrait.
+    | "models": only queries issued by models using ModelCacheTrait are
     |           cached. Writes from any builder still invalidate, so cached
     |           models never go stale through DB::table() or other models.
     |
     */
-    'scope' => env('LADA_CACHE_SCOPE', CacheScope::All->value),
+    'scope' => env('MODEL_CACHE_SCOPE', CacheScope::All->value),
 
     /*
     |--------------------------------------------------------------------------
@@ -202,30 +202,30 @@ return [
     |--------------------------------------------------------------------------
     |
     | Counts hits, misses, stores and invalidations per table, retires,
-    | bypasses and failures, inside the Redis calls Lada Cache already
-    | makes. `php artisan lada-cache:stats` reports them. Counters are kept
+    | bypasses and failures, inside the Redis calls Model Cache already
+    | makes. `php artisan model-cache:stats` reports them. Counters are kept
     | per time bucket of `metrics_bucket_seconds` and expire after
     | `metrics_retention_seconds`.
     |
     */
-    'metrics' => env('LADA_CACHE_METRICS', false),
+    'metrics' => env('MODEL_CACHE_METRICS', false),
 
-    'metrics_bucket_seconds' => env('LADA_CACHE_METRICS_BUCKET', Metrics::DEFAULT_BUCKET_SECONDS),
+    'metrics_bucket_seconds' => env('MODEL_CACHE_METRICS_BUCKET', Metrics::DEFAULT_BUCKET_SECONDS),
 
-    'metrics_retention_seconds' => env('LADA_CACHE_METRICS_RETENTION', Metrics::DEFAULT_RETENTION_SECONDS),
+    'metrics_retention_seconds' => env('MODEL_CACHE_METRICS_RETENTION', Metrics::DEFAULT_RETENTION_SECONDS),
 
     /*
     |--------------------------------------------------------------------------
     | Debugbar Collector
     |--------------------------------------------------------------------------
     |
-    | When enabled, Lada Cache will register a collector for the Laravel
+    | When enabled, Model Cache will register a collector for the Laravel
     | Debugbar package, allowing you to view cache activity and hit/miss
     | statistics directly in your browser during development.
     |
     | This is useful for debugging and optimizing query performance.
     |
     */
-    'enable_debugbar' => env('LADA_CACHE_ENABLE_DEBUGBAR', true),
+    'enable_debugbar' => env('MODEL_CACHE_ENABLE_DEBUGBAR', true),
 
 ];

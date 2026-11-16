@@ -2,24 +2,24 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Database;
+namespace Kontainer\ModelCache\Database;
 
-use Spiritix\LadaCache\Services;
+use Kontainer\ModelCache\Services;
 
 /**
- * Integrates Lada Cache into Eloquent models.
+ * Integrates Model Cache into Eloquent models.
  *
  * Include this trait on models to route all base queries through the
- * Lada Cache-aware query builder, enabling transparent caching and
+ * Model Cache-aware query builder, enabling transparent caching and
  * invalidation.
  */
-trait LadaCacheTrait
+trait ModelCacheTrait
 {
     /** {@inheritDoc} */
     protected function newBaseQueryBuilder()
     {
-        // When Lada Cache is disabled, use Laravel's default query builder
-        if (! (bool) config('lada-cache.active', true)) {
+        // When Model Cache is disabled, use Laravel's default query builder
+        if (! (bool) config('model-cache.active', true)) {
             return parent::newBaseQueryBuilder();
         }
 

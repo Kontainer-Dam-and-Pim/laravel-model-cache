@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
 use InvalidArgumentException;
-use Spiritix\LadaCache\Support\ConfigValue;
+use Kontainer\ModelCache\Support\ConfigValue;
 
 final readonly class ExpirationPolicy
 {
@@ -18,19 +18,19 @@ final readonly class ExpirationPolicy
         public int $jitterPercent = 0,
     ) {
         if ($seconds < 0) {
-            throw new InvalidArgumentException(sprintf('Invalid lada-cache.expiration_time %d, expected 0 or more seconds', $seconds));
+            throw new InvalidArgumentException(sprintf('Invalid model-cache.expiration_time %d, expected 0 or more seconds', $seconds));
         }
 
         if ($jitterPercent < 0 || $jitterPercent > 100) {
-            throw new InvalidArgumentException(sprintf('Invalid lada-cache.expiration_jitter %d, expected a percentage from 0 to 100', $jitterPercent));
+            throw new InvalidArgumentException(sprintf('Invalid model-cache.expiration_jitter %d, expected a percentage from 0 to 100', $jitterPercent));
         }
     }
 
     public static function fromConfig(): self
     {
         return new self(
-            ConfigValue::integer('lada-cache.expiration_time', self::DEFAULT_SECONDS),
-            ConfigValue::integer('lada-cache.expiration_jitter', self::DEFAULT_JITTER_PERCENT),
+            ConfigValue::integer('model-cache.expiration_time', self::DEFAULT_SECONDS),
+            ConfigValue::integer('model-cache.expiration_jitter', self::DEFAULT_JITTER_PERCENT),
         );
     }
 

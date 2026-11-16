@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support\Sql;
+namespace Kontainer\ModelCache\Support\Sql;
 
 /**
  * Ported from sqlparser-rs src/dialect/sqlite.rs (Apache-2.0), commit 8a176d9.

@@ -59,7 +59,7 @@ test-matrix *args: deps services
         done
     done
 
-# Run the differential fuzz suite on every database. Tune it with LADA_FUZZ_ITERATIONS.
+# Run the differential fuzz suite on every database. Tune it with MODEL_CACHE_FUZZ_ITERATIONS.
 fuzz *args: deps services
     #!/usr/bin/env bash
     set -euo pipefail

@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
+namespace Kontainer\ModelCache\Tests\Integration\QueryBuilder;
 
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Tests\Concerns\MakesTestModels;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\Database\Models\Driver;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Reflector;
+use Kontainer\ModelCache\Tests\Concerns\MakesTestModels;
+use Kontainer\ModelCache\Tests\Database\Models\Car;
+use Kontainer\ModelCache\Tests\Database\Models\Driver;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class CompiledSubQueryTablesTest extends TestCase
 {

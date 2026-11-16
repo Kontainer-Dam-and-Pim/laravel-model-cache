@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Database\Models\Application;
+namespace Kontainer\ModelCache\Tests\Database\Models\Application;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;

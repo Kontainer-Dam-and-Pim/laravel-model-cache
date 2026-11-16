@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 /**
  * Why the whole cache is retired, as the metrics name it.

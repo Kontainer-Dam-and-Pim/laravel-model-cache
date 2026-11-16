@@ -2,27 +2,27 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit\Support\Sql;
+namespace Kontainer\ModelCache\Tests\Unit\Support\Sql;
 
 use Closure;
 use Illuminate\Database\MySqlConnection;
 use InvalidArgumentException;
+use Kontainer\ModelCache\Support\Sql\Character;
+use Kontainer\ModelCache\Support\Sql\Dialect;
+use Kontainer\ModelCache\Support\Sql\DialectDefaults;
+use Kontainer\ModelCache\Support\Sql\Dialects;
+use Kontainer\ModelCache\Support\Sql\GenericDialect;
+use Kontainer\ModelCache\Support\Sql\MsSqlDialect;
+use Kontainer\ModelCache\Support\Sql\MySqlDialect;
+use Kontainer\ModelCache\Support\Sql\PostgreSqlDialect;
+use Kontainer\ModelCache\Support\Sql\SQLiteDialect;
+use Kontainer\ModelCache\Support\Sql\Token;
+use Kontainer\ModelCache\Support\Sql\Tokenizer;
+use Kontainer\ModelCache\Support\Sql\TokenizerException;
+use Kontainer\ModelCache\Support\Sql\TokenKind;
+use Kontainer\ModelCache\Support\SqlTableScanner;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Spiritix\LadaCache\Support\Sql\Character;
-use Spiritix\LadaCache\Support\Sql\Dialect;
-use Spiritix\LadaCache\Support\Sql\DialectDefaults;
-use Spiritix\LadaCache\Support\Sql\Dialects;
-use Spiritix\LadaCache\Support\Sql\GenericDialect;
-use Spiritix\LadaCache\Support\Sql\MsSqlDialect;
-use Spiritix\LadaCache\Support\Sql\MySqlDialect;
-use Spiritix\LadaCache\Support\Sql\PostgreSqlDialect;
-use Spiritix\LadaCache\Support\Sql\SQLiteDialect;
-use Spiritix\LadaCache\Support\Sql\Token;
-use Spiritix\LadaCache\Support\Sql\Tokenizer;
-use Spiritix\LadaCache\Support\Sql\TokenizerException;
-use Spiritix\LadaCache\Support\Sql\TokenKind;
-use Spiritix\LadaCache\Support\SqlTableScanner;
 
 /**
  * Ported from sqlparser-rs src/tokenizer.rs and tests/sqlparser_{mysql,postgres,sqlite}.rs (Apache-2.0), commit 8a176d9.

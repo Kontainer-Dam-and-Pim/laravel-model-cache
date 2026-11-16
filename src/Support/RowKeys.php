@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 /**
  * Turns primary key values into row tag suffixes that are equal whenever the database could

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
+namespace Kontainer\ModelCache\Tests\Integration\QueryBuilder;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Database\QueryBuilder;
-use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Database\QueryBuilder;
+use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
+use Kontainer\ModelCache\Tests\Database\Models\Car;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class WithoutCacheTest extends TestCase
 {

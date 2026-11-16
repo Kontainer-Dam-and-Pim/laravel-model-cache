@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Console;
+namespace Kontainer\ModelCache\Console;
 
 use Exception;
 use Illuminate\Console\Command as BaseCommand;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
-use Spiritix\LadaCache\LadaCacheServiceProvider;
+use Kontainer\ModelCache\ModelCacheServiceProvider;
 
 /**
- * Base console command for the Lada Cache package.
+ * Base console command for the Model Cache package.
  *
  * Provides shared helpers for concrete package commands. This class augments
  * Laravel's `Illuminate\\Console\\Command` with a safe `writeConfig()` method
@@ -22,11 +22,11 @@ abstract class Command extends BaseCommand
 {
     protected function writeConfig(string $key, string|bool|int|float|null $value): bool
     {
-        $configFile = config_path(LadaCacheServiceProvider::CONFIG_FILE);
+        $configFile = config_path(ModelCacheServiceProvider::CONFIG_FILE);
 
         if (! File::exists($configFile)) {
             Artisan::call('vendor:publish', [
-                '--provider' => LadaCacheServiceProvider::class,
+                '--provider' => ModelCacheServiceProvider::class,
                 '--tag' => 'config',
                 '--force' => true,
             ]);
@@ -68,7 +68,7 @@ abstract class Command extends BaseCommand
                 File::put($configFile, $newContents);
             }
         } catch (Exception $e) {
-            $this->error('Could not write lada-cache config: '.$e->getMessage());
+            $this->error('Could not write model-cache config: '.$e->getMessage());
 
             return false;
         }

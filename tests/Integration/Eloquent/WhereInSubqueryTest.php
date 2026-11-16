@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Eloquent;
+namespace Kontainer\ModelCache\Tests\Integration\Eloquent;
 
 use Illuminate\Database\Query\Builder;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\Database\Models\Driver;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\Database\Models\Car;
+use Kontainer\ModelCache\Tests\Database\Models\Driver;
+use Kontainer\ModelCache\Tests\TestCase;
 
 /**
  * A whereIn subquery reads its own table, so writes to that table must invalidate the outer query.

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit\Database;
+namespace Kontainer\ModelCache\Tests\Unit\Database;
 
 use Illuminate\Database\Connection as IlluminateConnection;
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class ConnectionProxyTest extends TestCase
 {

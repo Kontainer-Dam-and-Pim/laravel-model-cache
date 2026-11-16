@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Database;
+namespace Kontainer\ModelCache\Database;
 
 use Closure;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;

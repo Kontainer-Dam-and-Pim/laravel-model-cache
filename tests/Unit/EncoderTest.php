@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit;
+namespace Kontainer\ModelCache\Tests\Unit;
 
+use Kontainer\ModelCache\Encoder;
 use PHPUnit\Framework\TestCase;
-use Spiritix\LadaCache\Encoder;
 use stdClass;
 
 class EncoderTest extends TestCase

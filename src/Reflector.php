@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
+use Kontainer\ModelCache\Database\QueryBuilder;
+use Kontainer\ModelCache\Support\RowExtractor;
+use Kontainer\ModelCache\Support\Sql\Dialect;
+use Kontainer\ModelCache\Support\Sql\Dialects;
+use Kontainer\ModelCache\Support\SqlTableScanner;
+use Kontainer\ModelCache\Support\TableExtractor;
+use Kontainer\ModelCache\Support\Transactions;
 use RuntimeException;
-use Spiritix\LadaCache\Database\QueryBuilder;
-use Spiritix\LadaCache\Support\RowExtractor;
-use Spiritix\LadaCache\Support\Sql\Dialect;
-use Spiritix\LadaCache\Support\Sql\Dialects;
-use Spiritix\LadaCache\Support\SqlTableScanner;
-use Spiritix\LadaCache\Support\TableExtractor;
-use Spiritix\LadaCache\Support\Transactions;
 
 /**
  * Reflects an underlying Laravel Query Builder to extract metadata and SQL.

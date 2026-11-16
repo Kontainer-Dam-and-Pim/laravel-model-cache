@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit;
+namespace Kontainer\ModelCache\Tests\Unit;
 
 use InvalidArgumentException;
-use Spiritix\LadaCache\Cache;
-use Spiritix\LadaCache\CacheMiss;
-use Spiritix\LadaCache\Encoder;
-use Spiritix\LadaCache\ExpirationPolicy;
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Cache;
+use Kontainer\ModelCache\CacheMiss;
+use Kontainer\ModelCache\Encoder;
+use Kontainer\ModelCache\ExpirationPolicy;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class ExpirationPolicyTest extends TestCase
 {
@@ -43,14 +43,14 @@ final class ExpirationPolicyTest extends TestCase
     public function testOutOfRangeJitterFailsLoudly(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Invalid lada-cache.expiration_jitter 101');
+        $this->expectExceptionMessage('Invalid model-cache.expiration_jitter 101');
 
         new ExpirationPolicy(60, 101);
     }
 
     public function testAnEmptyValueUsesTheDefaultLikeAMissingOne(): void
     {
-        config(['lada-cache.expiration_time' => '', 'lada-cache.expiration_jitter' => '']);
+        config(['model-cache.expiration_time' => '', 'model-cache.expiration_jitter' => '']);
 
         $policy = ExpirationPolicy::fromConfig();
 
@@ -60,17 +60,17 @@ final class ExpirationPolicyTest extends TestCase
 
     public function testNonIntegerConfigFailsLoudly(): void
     {
-        config(['lada-cache.expiration_jitter' => 'lots']);
+        config(['model-cache.expiration_jitter' => 'lots']);
 
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Invalid lada-cache.expiration_jitter "lots", expected an integer');
+        $this->expectExceptionMessage('Invalid model-cache.expiration_jitter "lots", expected an integer');
 
         ExpirationPolicy::fromConfig();
     }
 
     public function testStoredEntriesAndVersionsGetJitteredTtls(): void
     {
-        config(['lada-cache.prefix' => 'jitter:']);
+        config(['model-cache.prefix' => 'jitter:']);
         $redis = new Redis;
         $cache = new Cache($redis, new Encoder, new ExpirationPolicy(10_000, 50));
         $ttls = [];

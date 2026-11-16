@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Concerns;
+namespace Kontainer\ModelCache\Tests\Concerns;
 
 use Illuminate\Database\Query\Builder;
+use Kontainer\ModelCache\Cache;
+use Kontainer\ModelCache\CacheHit;
+use Kontainer\ModelCache\CacheMiss;
+use Kontainer\ModelCache\Database\QueryBuilder;
+use Kontainer\ModelCache\Hasher;
+use Kontainer\ModelCache\Reflector;
+use Kontainer\ModelCache\Tagger;
 use PHPUnit\Framework\Assert;
-use Spiritix\LadaCache\Cache;
-use Spiritix\LadaCache\CacheHit;
-use Spiritix\LadaCache\CacheMiss;
-use Spiritix\LadaCache\Database\QueryBuilder;
-use Spiritix\LadaCache\Hasher;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Tagger;
 
 trait CacheAssertions
 {
@@ -23,7 +23,7 @@ trait CacheAssertions
     {
         $lookup = $this->lookupRead($key, $tags);
         Assert::assertInstanceOf(CacheMiss::class, $lookup, "Expected no valid entry for '{$key}' before seeding");
-        $this->ladaCache()->store($lookup, $rows);
+        $this->modelCache()->store($lookup, $rows);
     }
 
     /**
@@ -69,11 +69,11 @@ trait CacheAssertions
     {
         $read = $tags instanceof ReadTags ? $tags : new ReadTags(array_values($tags), []);
 
-        return $this->ladaCache()->lookup($key, $read->tags, $read->cascadeReads);
+        return $this->modelCache()->lookup($key, $read->tags, $read->cascadeReads);
     }
 
-    private function ladaCache(): Cache
+    private function modelCache(): Cache
     {
-        return app('lada.cache');
+        return app('model-cache.cache');
     }
 }

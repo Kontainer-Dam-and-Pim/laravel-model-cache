@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Database;
+namespace Kontainer\ModelCache\Database;
 
 use Illuminate\Database\SqlServerConnection as BaseSqlServerConnection;
-use Spiritix\LadaCache\Services;
+use Kontainer\ModelCache\Services;
 
 /**
- * Lada Cache-aware SQL Server connection.
+ * Model Cache-aware SQL Server connection.
  */
 final class SqlServerConnection extends BaseSqlServerConnection implements RunsBuilderStatements
 {
@@ -17,7 +17,7 @@ final class SqlServerConnection extends BaseSqlServerConnection implements RunsB
     /** {@inheritDoc} */
     public function query()
     {
-        if (! (bool) config('lada-cache.active', true)) {
+        if (! (bool) config('model-cache.active', true)) {
             return parent::query();
         }
 

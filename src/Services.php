@@ -2,23 +2,23 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
 use Illuminate\Support\Facades\App;
+use Kontainer\ModelCache\Debug\CacheCollector;
 use LogicException;
-use Spiritix\LadaCache\Debug\CacheCollector;
 
 final class Services
 {
-    public const string REDIS = 'lada.redis';
+    public const string REDIS = 'model-cache.redis';
 
-    public const string CACHE = 'lada.cache';
+    public const string CACHE = 'model-cache.cache';
 
-    public const string HANDLER = 'lada.handler';
+    public const string HANDLER = 'model-cache.handler';
 
-    public const string COLLECTOR = 'lada.collector';
+    public const string COLLECTOR = 'model-cache.collector';
 
-    public const string METRICS = 'lada.metrics';
+    public const string METRICS = 'model-cache.metrics';
 
     public static function redis(): Redis
     {

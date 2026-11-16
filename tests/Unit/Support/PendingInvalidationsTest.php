@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit\Support;
+namespace Kontainer\ModelCache\Tests\Unit\Support;
 
 use Illuminate\Database\SQLiteConnection;
+use Kontainer\ModelCache\Support\Invalidation;
+use Kontainer\ModelCache\Support\PendingInvalidations;
+use Kontainer\ModelCache\Support\Write;
 use PDO;
 use PHPUnit\Framework\TestCase;
-use Spiritix\LadaCache\Support\Invalidation;
-use Spiritix\LadaCache\Support\PendingInvalidations;
-use Spiritix\LadaCache\Support\Write;
 
 final class PendingInvalidationsTest extends TestCase
 {

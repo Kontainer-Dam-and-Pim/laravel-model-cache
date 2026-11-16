@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
-use Spiritix\LadaCache\Support\Sql\DeleteStatement;
-use Spiritix\LadaCache\Support\Sql\Dialect;
-use Spiritix\LadaCache\Support\Sql\InsertStatement;
-use Spiritix\LadaCache\Support\Sql\MergeStatement;
-use Spiritix\LadaCache\Support\Sql\Parser;
-use Spiritix\LadaCache\Support\Sql\ParserException;
-use Spiritix\LadaCache\Support\Sql\SqlMemo;
-use Spiritix\LadaCache\Support\Sql\Token;
-use Spiritix\LadaCache\Support\Sql\Tokenizer;
-use Spiritix\LadaCache\Support\Sql\TokenKind;
-use Spiritix\LadaCache\Support\Sql\TruncateStatement;
-use Spiritix\LadaCache\Support\Sql\UpdateStatement;
+use Kontainer\ModelCache\Support\Sql\DeleteStatement;
+use Kontainer\ModelCache\Support\Sql\Dialect;
+use Kontainer\ModelCache\Support\Sql\InsertStatement;
+use Kontainer\ModelCache\Support\Sql\MergeStatement;
+use Kontainer\ModelCache\Support\Sql\Parser;
+use Kontainer\ModelCache\Support\Sql\ParserException;
+use Kontainer\ModelCache\Support\Sql\SqlMemo;
+use Kontainer\ModelCache\Support\Sql\Token;
+use Kontainer\ModelCache\Support\Sql\Tokenizer;
+use Kontainer\ModelCache\Support\Sql\TokenKind;
+use Kontainer\ModelCache\Support\Sql\TruncateStatement;
+use Kontainer\ModelCache\Support\Sql\UpdateStatement;
 
 /**
  * Finds the tables SQL text reads or writes, including those only named inside raw expressions
@@ -110,7 +110,7 @@ final class SqlTableScanner
             try {
                 $statements[] = (new Parser($dialect, array_slice($tokens, $position)))->parseWriteStatement();
             } catch (ParserException $exception) {
-                throw new ParserException("Lada Cache cannot tell which table the {$token->value} at offset {$token->offset} writes: {$exception->getMessage()}", 0, $exception);
+                throw new ParserException("Model Cache cannot tell which table the {$token->value} at offset {$token->offset} writes: {$exception->getMessage()}", 0, $exception);
             }
         }
 

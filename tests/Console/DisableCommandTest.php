@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Console;
+namespace Kontainer\ModelCache\Tests\Console;
 
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class DisableCommandTest extends TestCase
 {
     public function testDisableCommandPrintsMessageAndSucceeds(): void
     {
-        $this->artisan('lada-cache:disable')
-            ->expectsOutput('Lada Cache disabled.')
+        $this->artisan('model-cache:disable')
+            ->expectsOutput('Model Cache disabled.')
             ->assertExitCode(0);
     }
 }

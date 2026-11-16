@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Database\Models;
+namespace Kontainer\ModelCache\Tests\Database\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,12 +10,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Spiritix\LadaCache\Database\LadaCacheTrait;
+use Kontainer\ModelCache\Database\ModelCacheTrait;
 
 class Car extends Model
 {
     use HasFactory;
-    use LadaCacheTrait;
+    use ModelCacheTrait;
     use SoftDeletes;
 
     protected $fillable = ['name', 'engine_id', 'driver_id'];

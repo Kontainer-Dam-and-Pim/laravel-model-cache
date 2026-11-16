@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Database;
+namespace Kontainer\ModelCache\Database;
 
 use Illuminate\Database\MySqlConnection as BaseMySqlConnection;
-use Spiritix\LadaCache\Services;
+use Kontainer\ModelCache\Services;
 
 /**
- * Lada Cache-aware MySQL connection.
+ * Model Cache-aware MySQL connection.
  *
- * Extends Laravel's MySqlConnection to return the Lada QueryBuilder when active,
+ * Extends Laravel's MySqlConnection to return the caching QueryBuilder when active,
  * preserving all driver-specific behaviors (schema builder, insert IDs, etc.).
  */
 final class MySqlConnection extends BaseMySqlConnection implements RunsBuilderStatements
@@ -20,7 +20,7 @@ final class MySqlConnection extends BaseMySqlConnection implements RunsBuilderSt
     /** {@inheritDoc} */
     public function query()
     {
-        if (! (bool) config('lada-cache.active', true)) {
+        if (! (bool) config('model-cache.active', true)) {
             return parent::query();
         }
 

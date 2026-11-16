@@ -2,24 +2,24 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit\Support\Sql;
+namespace Kontainer\ModelCache\Tests\Unit\Support\Sql;
 
+use Kontainer\ModelCache\Support\Sql\DeleteStatement;
+use Kontainer\ModelCache\Support\Sql\Dialects;
+use Kontainer\ModelCache\Support\Sql\InsertStatement;
+use Kontainer\ModelCache\Support\Sql\MergeStatement;
+use Kontainer\ModelCache\Support\Sql\Parser;
+use Kontainer\ModelCache\Support\Sql\ParserException;
+use Kontainer\ModelCache\Support\Sql\TruncateStatement;
+use Kontainer\ModelCache\Support\Sql\UpdateStatement;
+use Kontainer\ModelCache\Support\Sql\WriteTargets;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Spiritix\LadaCache\Support\Sql\DeleteStatement;
-use Spiritix\LadaCache\Support\Sql\Dialects;
-use Spiritix\LadaCache\Support\Sql\InsertStatement;
-use Spiritix\LadaCache\Support\Sql\MergeStatement;
-use Spiritix\LadaCache\Support\Sql\Parser;
-use Spiritix\LadaCache\Support\Sql\ParserException;
-use Spiritix\LadaCache\Support\Sql\TruncateStatement;
-use Spiritix\LadaCache\Support\Sql\UpdateStatement;
-use Spiritix\LadaCache\Support\Sql\WriteTargets;
 
 /**
  * Ported from sqlparser-rs tests/sqlparser_{common,mysql,postgres,sqlite,mssql}.rs (Apache-2.0), commit 8a176d9: the
- * cases that parse a write or a FROM clause, asserting the tables and columns lada extracts on each dialect that runs
- * them, and that syntax lada cannot map to tables throws. The `lada*` providers cover what the port adds beyond them.
+ * cases that parse a write or a FROM clause, asserting the tables and columns the cache extracts on each dialect that runs
+ * them, and that syntax the cache cannot map to tables throws. The `port*` providers cover what the port adds beyond them.
  */
 final class ParserTest extends TestCase
 {
@@ -688,7 +688,7 @@ final class ParserTest extends TestCase
     /**
      * @return iterable<string, array{string, list<string>, string}>
      */
-    public static function ladaWrites(): iterable
+    public static function portWrites(): iterable
     {
         yield 'a column named output or returning in an assigned value' => ['UPDATE jobs SET a = output, b = returning, c = 2', ['mysql'], 'UPDATE jobs SET a, b, c'];
     }
@@ -696,7 +696,7 @@ final class ParserTest extends TestCase
     /**
      * @return iterable<string, array{string, list<string>}>
      */
-    public static function ladaUnsupportedWrites(): iterable
+    public static function portUnsupportedWrites(): iterable
     {
         yield 'OUTPUT INTO a table from an INSERT' => ['INSERT INTO t (a) OUTPUT inserted.a INTO audit (a) VALUES (1)', ['sqlsrv']];
         yield 'OUTPUT INTO a table from an UPDATE' => ['UPDATE t SET a = 1 OUTPUT inserted.a INTO audit WHERE b = 2', ['sqlsrv']];
@@ -708,7 +708,7 @@ final class ParserTest extends TestCase
     /**
      * @return iterable<string, array{string, list<string>, list<string>}>
      */
-    public static function ladaReads(): iterable
+    public static function portReads(): iterable
     {
         yield 'a parenthesized set operation joined to a table' => ['SELECT * FROM ((SELECT x FROM foo) UNION (SELECT y FROM bar)) AS t1 NATURAL JOIN t2', self::ALL, ['t2', 'foo', 'bar']];
         yield 'TABLE query bodies in a subquery and a set operation' => ['SELECT * FROM t WHERE x IN (TABLE u) UNION TABLE v', ['mysql', 'pgsql'], ['t', 'u', 'v']];
@@ -720,7 +720,7 @@ final class ParserTest extends TestCase
     /**
      * @return iterable<string, array{string, list<string>}>
      */
-    public static function ladaUnsupportedReads(): iterable
+    public static function portUnsupportedReads(): iterable
     {
         yield 'a temporal clause other than AS OF' => ['SELECT * FROM t FOR SYSTEM_TIME ALL, u', ['sqlsrv']];
     }
@@ -733,7 +733,7 @@ final class ParserTest extends TestCase
     #[DataProvider('postgresWrites')]
     #[DataProvider('sqliteWrites')]
     #[DataProvider('mssqlWrites')]
-    #[DataProvider('ladaWrites')]
+    #[DataProvider('portWrites')]
     public function testWritesNameTheirTargetsAndAssignedColumns(string $sql, array $drivers, string $expected): void
     {
         foreach ($drivers as $driver) {
@@ -747,7 +747,7 @@ final class ParserTest extends TestCase
     #[DataProvider('commonUnsupportedWrites')]
     #[DataProvider('postgresUnsupportedWrites')]
     #[DataProvider('mssqlUnsupportedWrites')]
-    #[DataProvider('ladaUnsupportedWrites')]
+    #[DataProvider('portUnsupportedWrites')]
     public function testWritesThatCannotBeFullyUnderstoodThrow(string $sql, array $drivers): void
     {
         foreach ($drivers as $driver) {
@@ -764,7 +764,7 @@ final class ParserTest extends TestCase
     #[DataProvider('postgresReads')]
     #[DataProvider('sqliteReads')]
     #[DataProvider('mssqlReads')]
-    #[DataProvider('ladaReads')]
+    #[DataProvider('portReads')]
     public function testReadsNameEveryRelation(string $sql, array $drivers, array $expected): void
     {
         foreach ($drivers as $driver) {
@@ -788,7 +788,7 @@ final class ParserTest extends TestCase
     #[DataProvider('postgresUnsupportedReads')]
     #[DataProvider('sqliteUnsupportedReads')]
     #[DataProvider('mssqlUnsupportedReads')]
-    #[DataProvider('ladaUnsupportedReads')]
+    #[DataProvider('portUnsupportedReads')]
     public function testReadsOfUnknownShapeThrow(string $sql, array $drivers): void
     {
         foreach ($drivers as $driver) {

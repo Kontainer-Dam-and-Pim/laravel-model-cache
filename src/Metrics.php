@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
 use InvalidArgumentException;
-use Spiritix\LadaCache\Support\ConfigValue;
-use Spiritix\LadaCache\Support\Metric;
-use Spiritix\LadaCache\Support\RedisReply;
+use Kontainer\ModelCache\Support\ConfigValue;
+use Kontainer\ModelCache\Support\Metric;
+use Kontainer\ModelCache\Support\RedisReply;
 
 /**
  * Counters of what the cache does, for measuring it in production: hits, misses, stores,
  * invalidations and their cascades per table, retires, bypasses, failures and the statements
- * that cost hit rate. They are opt-in (`lada-cache.metrics`).
+ * that cost hit rate. They are opt-in (`model-cache.metrics`).
  *
  * Counters live in one Redis hash per time bucket, outside the cache generation so a retire
  * keeps them, and expire after the retention. What a script does it counts itself, in the call
@@ -39,20 +39,20 @@ final class Metrics
         private readonly int $retentionSeconds = self::DEFAULT_RETENTION_SECONDS,
     ) {
         if ($bucketSeconds < 1) {
-            throw new InvalidArgumentException(sprintf('Invalid lada-cache.metrics_bucket_seconds %d, expected 1 or more seconds', $bucketSeconds));
+            throw new InvalidArgumentException(sprintf('Invalid model-cache.metrics_bucket_seconds %d, expected 1 or more seconds', $bucketSeconds));
         }
 
         if ($retentionSeconds < $bucketSeconds) {
-            throw new InvalidArgumentException(sprintf('Invalid lada-cache.metrics_retention_seconds %d, expected at least the bucket of %d seconds', $retentionSeconds, $bucketSeconds));
+            throw new InvalidArgumentException(sprintf('Invalid model-cache.metrics_retention_seconds %d, expected at least the bucket of %d seconds', $retentionSeconds, $bucketSeconds));
         }
     }
 
     public static function fromConfig(): self
     {
         return new self(
-            (bool) config('lada-cache.metrics', false),
-            ConfigValue::integer('lada-cache.metrics_bucket_seconds', self::DEFAULT_BUCKET_SECONDS),
-            ConfigValue::integer('lada-cache.metrics_retention_seconds', self::DEFAULT_RETENTION_SECONDS),
+            (bool) config('model-cache.metrics', false),
+            ConfigValue::integer('model-cache.metrics_bucket_seconds', self::DEFAULT_BUCKET_SECONDS),
+            ConfigValue::integer('model-cache.metrics_retention_seconds', self::DEFAULT_RETENTION_SECONDS),
         );
     }
 

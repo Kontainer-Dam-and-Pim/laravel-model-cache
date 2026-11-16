@@ -1,5 +1,5 @@
 {
-    "name": "spiritix/lada-cache",
+    "name": "kontainer/laravel-model-cache",
     "type": "library",
     "description": "A Redis based, automated and scalable database caching layer for Laravel",
     "license": "MIT",
@@ -39,12 +39,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Spiritix\\LadaCache\\": "src/"
+            "Kontainer\\ModelCache\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Spiritix\\LadaCache\\Tests\\": "tests/"
+            "Kontainer\\ModelCache\\Tests\\": "tests/"
         }
     },
     "minimum-stability": "stable",
@@ -52,7 +52,7 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Spiritix\\LadaCache\\LadaCacheServiceProvider"
+                "Kontainer\\ModelCache\\ModelCacheServiceProvider"
             ]
         }
     },

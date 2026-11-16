@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Benchmark;
+namespace Kontainer\ModelCache\Tests\Benchmark;
 
 use Illuminate\Database\Eloquent\Model;
-use Spiritix\LadaCache\Database\LadaCacheTrait;
-use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Database\ModelCacheTrait;
+use Kontainer\ModelCache\Tests\Concerns\RecordsRedisCommands;
+use Kontainer\ModelCache\Tests\TestCase;
 
 /**
  * Measures what a cached read costs an application: reads per second with and without the cache,
@@ -33,7 +33,7 @@ final class CacheBenchmarkTest extends TestCase
             BenchmarkCar::query()->insert($rows);
         }
 
-        $uncached = $this->measure(fn () => config(['lada-cache.active' => false]));
+        $uncached = $this->measure(fn () => config(['model-cache.active' => false]));
         $hits = $this->measure();
         $roundTrips = count($this->recordRedisCommands(fn () => $this->measure()));
 
@@ -55,7 +55,7 @@ final class CacheBenchmarkTest extends TestCase
      */
     private function measure(?\Closure $setUp = null): float
     {
-        $wasActive = config('lada-cache.active');
+        $wasActive = config('model-cache.active');
         $setUp?->__invoke();
         $started = hrtime(true);
 
@@ -64,7 +64,7 @@ final class CacheBenchmarkTest extends TestCase
         }
 
         $elapsed = (hrtime(true) - $started) / 1e9;
-        config(['lada-cache.active' => $wasActive]);
+        config(['model-cache.active' => $wasActive]);
 
         return self::READS / $elapsed;
     }
@@ -72,7 +72,7 @@ final class CacheBenchmarkTest extends TestCase
 
 final class BenchmarkCar extends Model
 {
-    use LadaCacheTrait;
+    use ModelCacheTrait;
 
     public $timestamps = false;
 

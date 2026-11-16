@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 /**
  * Tables Laravel itself writes on nearly every request or job when sessions, cache or queues

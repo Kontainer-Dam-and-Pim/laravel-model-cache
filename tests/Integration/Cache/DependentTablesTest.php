@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\Schema\Blueprint;
@@ -10,14 +10,14 @@ use Illuminate\Redis\Events\CommandExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Spiritix\LadaCache\Generation;
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Support\DependentTables;
-use Spiritix\LadaCache\Support\Invalidation;
-use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
-use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
-use Spiritix\LadaCache\Tests\Database\Models\License;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Generation;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Support\DependentTables;
+use Kontainer\ModelCache\Support\Invalidation;
+use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
+use Kontainer\ModelCache\Tests\Concerns\RecordsRedisCommands;
+use Kontainer\ModelCache\Tests\Database\Models\License;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class DependentTablesTest extends TestCase
 {
@@ -304,7 +304,7 @@ final class DependentTablesTest extends TestCase
 
     public function testReadsCachedBeforeTheDependencyMapIsKnownAreRefreshedByRowPreciseCascades(): void
     {
-        app('lada.cache')->flush();
+        app('model-cache.cache')->flush();
         $this->assertSame(['rex'], DB::table('pets')->where('owner_id', 1)->pluck('name')->all());
 
         DB::table('owners')->where('id', 1)->delete();
@@ -314,7 +314,7 @@ final class DependentTablesTest extends TestCase
 
     public function testReadsCachedBeforeTheDependencyMapIsKnownMissOnceWhenAWriteLoadsIt(): void
     {
-        app('lada.cache')->flush();
+        app('model-cache.cache')->flush();
         DB::table('pets')->where('owner_id', 2)->get();
         [$key, $tags] = $this->cacheKeyAndTags(DB::table('pets')->where('owner_id', 2));
         $this->assertCacheHas($key, $tags);
@@ -395,7 +395,7 @@ final class DependentTablesTest extends TestCase
 
     public function testConfiguredDependentTablesAreInvalidatedToo(): void
     {
-        config(['lada-cache.dependent_tables' => ['drivers' => ['materials']]]);
+        config(['model-cache.dependent_tables' => ['drivers' => ['materials']]]);
         DB::table('materials')->insert(['id' => 1, 'name' => 'steel']);
         $this->assertSame('steel', DB::table('materials')->where('id', 1)->value('name'));
         DB::connection()->getPdo()->exec("update materials set name = 'written by a trigger' where id = 1");
@@ -409,7 +409,7 @@ final class DependentTablesTest extends TestCase
     {
         DB::table('drivers')->count();
         DB::table('drivers')->update(['name' => 'stores the dependency map']);
-        config(['lada-cache.dependent_tables' => ['drivers' => ['materials']]]);
+        config(['model-cache.dependent_tables' => ['drivers' => ['materials']]]);
         DB::table('materials')->insert(['id' => 1, 'name' => 'steel']);
         $this->assertSame('steel', DB::table('materials')->where('id', 1)->value('name'));
         DB::connection()->getPdo()->exec("update materials set name = 'written by a trigger' where id = 1");
@@ -421,7 +421,7 @@ final class DependentTablesTest extends TestCase
 
     public function testWritesToTablesExcludedFromCachingStillCascade(): void
     {
-        config(['lada-cache.exclude_tables' => ['owners']]);
+        config(['model-cache.exclude_tables' => ['owners']]);
         $this->assertSame(2, DB::table('pets')->count());
 
         DB::table('owners')->where('id', 1)->delete();
@@ -517,7 +517,7 @@ final class DependentTablesTest extends TestCase
 
     public function testReadsCachedWhileTheSchemaWasUnreadableAreRefreshedByRowPreciseCascades(): void
     {
-        $cache = app('lada.cache');
+        $cache = app('model-cache.cache');
         $database = DB::connection()->getDatabaseName();
         $generation = new Generation($this->generationId());
         $cache->storeUnreadableDependents($generation, $database);

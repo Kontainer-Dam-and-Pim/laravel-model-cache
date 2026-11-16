@@ -2,33 +2,33 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Console;
+namespace Kontainer\ModelCache\Tests\Console;
 
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class FlushCommandTest extends TestCase
 {
     protected function setUp(): void
     {
         parent::setUp();
-        config(['lada-cache.enable_debugbar' => false]);
+        config(['model-cache.enable_debugbar' => false]);
     }
 
     public function testFlushIsNoOpWhenDisabled(): void
     {
-        config(['lada-cache.active' => false]);
+        config(['model-cache.active' => false]);
 
-        $this->artisan('lada-cache:flush')
-            ->expectsOutput('Lada Cache is disabled. Nothing to flush.')
+        $this->artisan('model-cache:flush')
+            ->expectsOutput('Model Cache is disabled. Nothing to flush.')
             ->assertExitCode(0);
     }
 
     public function testFlushCallsCacheAndSucceeds(): void
     {
-        config(['lada-cache.active' => true]);
+        config(['model-cache.active' => true]);
 
-        $this->artisan('lada-cache:flush')
-            ->expectsOutput('Lada Cache has been flushed successfully.')
+        $this->artisan('model-cache:flush')
+            ->expectsOutput('Model Cache has been flushed successfully.')
             ->assertExitCode(0);
     }
 }

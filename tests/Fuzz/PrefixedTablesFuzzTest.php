@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Fuzz;
+namespace Kontainer\ModelCache\Tests\Fuzz;
 
-use Spiritix\LadaCache\Tests\Fuzz\Support\Workload;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\Fuzz\Support\Workload;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class PrefixedTablesFuzzTest extends TestCase
 {

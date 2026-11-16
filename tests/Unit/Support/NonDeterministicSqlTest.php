@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit\Support;
+namespace Kontainer\ModelCache\Tests\Unit\Support;
 
+use Kontainer\ModelCache\Support\NonDeterministicSql;
+use Kontainer\ModelCache\Support\Sql\Dialects;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Spiritix\LadaCache\Support\NonDeterministicSql;
-use Spiritix\LadaCache\Support\Sql\Dialects;
 
 final class NonDeterministicSqlTest extends TestCase
 {

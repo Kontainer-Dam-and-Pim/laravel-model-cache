@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
 use Illuminate\Redis\Connections\Connection;
 use Illuminate\Redis\Connections\PhpRedisConnection;
 use Illuminate\Redis\Connections\PredisConnection;
 use Illuminate\Support\Facades\Redis as RedisFacade;
+use Kontainer\ModelCache\Support\ConfigValue;
+use Kontainer\ModelCache\Support\RedisAvailability;
+use Kontainer\ModelCache\Support\RedisCooldown;
 use Predis\ClientInterface as PredisClientInterface;
 use Predis\Command\Processor\KeyPrefixProcessor;
 use Predis\Response\ServerException;
 use Redis as PhpRedisClient;
 use RedisCluster;
 use RuntimeException;
-use Spiritix\LadaCache\Support\ConfigValue;
-use Spiritix\LadaCache\Support\RedisAvailability;
-use Spiritix\LadaCache\Support\RedisCooldown;
 use Throwable;
 
 /**
- * Lazy Redis access for Lada Cache with a circuit breaker.
+ * Lazy Redis access for Model Cache with a circuit breaker.
  *
  * Architectural notes:
  * - The connection is resolved on first use, so building query builders never touches Redis.
@@ -31,7 +31,7 @@ use Throwable;
  */
 final class Redis
 {
-    public const string DEFAULT_PREFIX = 'lada:';
+    public const string DEFAULT_PREFIX = 'model-cache:';
 
     public const string DEFAULT_CONNECTION = 'cache';
 
@@ -50,8 +50,8 @@ final class Redis
         private ?Connection $connection = null,
         ?RedisAvailability $availability = null,
     ) {
-        $this->prefix = ConfigValue::string('lada-cache.prefix', self::DEFAULT_PREFIX);
-        $this->connectionName = $connection?->getName() ?? ConfigValue::string('lada-cache.redis_connection', self::DEFAULT_CONNECTION);
+        $this->prefix = ConfigValue::string('model-cache.prefix', self::DEFAULT_PREFIX);
+        $this->connectionName = $connection?->getName() ?? ConfigValue::string('model-cache.redis_connection', self::DEFAULT_CONNECTION);
         $this->availability = $availability ?? RedisAvailability::detect($this->processStateKey('unavailable'));
     }
 
@@ -65,7 +65,7 @@ final class Redis
      */
     public function processStateKey(string $purpose): string
     {
-        return 'lada-cache:'.$purpose.':'.$this->connectionName.':'.$this->prefix;
+        return 'model-cache:'.$purpose.':'.$this->connectionName.':'.$this->prefix;
     }
 
     private function keyBase(): string
@@ -104,7 +104,7 @@ final class Redis
         if ($result === false) {
             $this->availability->markUnavailable();
 
-            throw new RuntimeException('Redis rejected the Lada Cache script '.LuaScripts::nameOf($script).': '.$this->lastClientError());
+            throw new RuntimeException('Redis rejected the Model Cache script '.LuaScripts::nameOf($script).': '.$this->lastClientError());
         }
 
         $this->availability->markAvailable();
@@ -165,7 +165,7 @@ final class Redis
         return match (true) {
             $connection instanceof PhpRedisConnection => self::phpRedisPrefix(self::phpRedisClient($connection)),
             $connection instanceof PredisConnection => self::predisPrefix($connection),
-            default => throw new RuntimeException('Unsupported Redis connection for Lada Cache: '.$connection::class),
+            default => throw new RuntimeException('Unsupported Redis connection for Model Cache: '.$connection::class),
         };
     }
 
@@ -182,7 +182,7 @@ final class Redis
     {
         $client = $connection->client();
 
-        return $client instanceof PhpRedisClient || $client instanceof RedisCluster ? $client : throw new RuntimeException('Lada Cache supports phpredis connections backed by a Redis or RedisCluster client, got '.get_debug_type($client));
+        return $client instanceof PhpRedisClient || $client instanceof RedisCluster ? $client : throw new RuntimeException('Model Cache supports phpredis connections backed by a Redis or RedisCluster client, got '.get_debug_type($client));
     }
 
     private static function phpRedisPrefix(PhpRedisClient|RedisCluster $client): string
@@ -197,7 +197,7 @@ final class Redis
         $client = $connection->client();
 
         if (! $client instanceof PredisClientInterface) {
-            throw new RuntimeException('Lada Cache supports Predis connections backed by a Predis client, got '.get_debug_type($client));
+            throw new RuntimeException('Model Cache supports Predis connections backed by a Predis client, got '.get_debug_type($client));
         }
 
         $prefix = $client->getOptions()->prefix;

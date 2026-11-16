@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 /**
  * Why a read went to the database without the cache being asked, as the metrics name it.

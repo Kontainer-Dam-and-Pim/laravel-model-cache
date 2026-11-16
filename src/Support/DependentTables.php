@@ -2,31 +2,31 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 use Illuminate\Database\Connection;
 use Illuminate\Database\MySqlConnection;
 use InvalidArgumentException;
+use Kontainer\ModelCache\Support\Sql\DeleteStatement;
+use Kontainer\ModelCache\Support\Sql\Dialect;
+use Kontainer\ModelCache\Support\Sql\Dialects;
+use Kontainer\ModelCache\Support\Sql\InsertStatement;
+use Kontainer\ModelCache\Support\Sql\MergeStatement;
+use Kontainer\ModelCache\Support\Sql\ParserException;
+use Kontainer\ModelCache\Support\Sql\SQLiteDialect;
+use Kontainer\ModelCache\Support\Sql\Token;
+use Kontainer\ModelCache\Support\Sql\Tokenizer;
+use Kontainer\ModelCache\Support\Sql\TokenizerException;
+use Kontainer\ModelCache\Support\Sql\TruncateStatement;
+use Kontainer\ModelCache\Support\Sql\UpdateStatement;
+use Kontainer\ModelCache\Support\Sql\WriteTargets;
 use RuntimeException;
-use Spiritix\LadaCache\Support\Sql\DeleteStatement;
-use Spiritix\LadaCache\Support\Sql\Dialect;
-use Spiritix\LadaCache\Support\Sql\Dialects;
-use Spiritix\LadaCache\Support\Sql\InsertStatement;
-use Spiritix\LadaCache\Support\Sql\MergeStatement;
-use Spiritix\LadaCache\Support\Sql\ParserException;
-use Spiritix\LadaCache\Support\Sql\SQLiteDialect;
-use Spiritix\LadaCache\Support\Sql\Token;
-use Spiritix\LadaCache\Support\Sql\Tokenizer;
-use Spiritix\LadaCache\Support\Sql\TokenizerException;
-use Spiritix\LadaCache\Support\Sql\TruncateStatement;
-use Spiritix\LadaCache\Support\Sql\UpdateStatement;
-use Spiritix\LadaCache\Support\Sql\WriteTargets;
 use UnexpectedValueException;
 
 /**
  * Tables the database changes along with a written table, so their cached reads are
  * invalidated too: views over the table, tables its triggers write and
- * `lada-cache.dependent_tables` change with every write, while foreign keys fire their delete
+ * `model-cache.dependent_tables` change with every write, while foreign keys fire their delete
  * rules on deletes and their update rules on updates that assign a referenced column. Writing an
  * updatable view writes its base tables. A changed table changes its own dependents in turn:
  * a cascading delete deletes the child rows, while a cascading or nulling update, and a nulling
@@ -150,7 +150,7 @@ final class DependentTables
      */
     public static function configured(): array
     {
-        $configured = config('lada-cache.dependent_tables', []);
+        $configured = config('model-cache.dependent_tables', []);
 
         if (! is_array($configured)) {
             throw self::invalidConfiguration();
@@ -189,7 +189,7 @@ final class DependentTables
             $childColumn = self::text($row, 'child_column');
 
             if ($row['parent_column'] === null) {
-                throw new RuntimeException("Lada Cache cannot tell which column of {$parent} the foreign key of {$child} on {$childColumn} references");
+                throw new RuntimeException("Model Cache cannot tell which column of {$parent} the foreign key of {$child} on {$childColumn} references");
             }
 
             $row += [
@@ -225,7 +225,7 @@ final class DependentTables
 
     private static function invalidConfiguration(): InvalidArgumentException
     {
-        return new InvalidArgumentException('Invalid lada-cache.dependent_tables, expected an array of table => list of tables');
+        return new InvalidArgumentException('Invalid model-cache.dependent_tables, expected an array of table => list of tables');
     }
 
     /**
@@ -236,7 +236,7 @@ final class DependentTables
         $value = $row[$column] ?? null;
 
         if (! is_string($value) && ! is_int($value)) {
-            throw new UnexpectedValueException("Lada Cache read {$column} of the schema as ".get_debug_type($value).', expected text');
+            throw new UnexpectedValueException("Model Cache read {$column} of the schema as ".get_debug_type($value).', expected text');
         }
 
         return (string) $value;
@@ -307,7 +307,7 @@ final class DependentTables
                 .' join sys.columns child_column on child_column.object_id = fkc.parent_object_id and child_column.column_id = fkc.parent_column_id'
                 .' join sys.columns parent_column on parent_column.object_id = fkc.referenced_object_id and parent_column.column_id = fkc.referenced_column_id'
                 .' order by fkc.constraint_column_id',
-            default => throw new RuntimeException('Lada Cache cannot read foreign keys of driver '.$connection->getDriverName()),
+            default => throw new RuntimeException('Model Cache cannot read foreign keys of driver '.$connection->getDriverName()),
         };
     }
 
@@ -346,7 +346,7 @@ final class DependentTables
                 ." and v.relkind = 'v' and n.nspname = any(current_schemas(false))",
             'sqlsrv' => 'select distinct d.referenced_entity_name as base_table, object_name(d.referencing_id) as view_name'
                 .' from sys.sql_expression_dependencies d join sys.views v on v.object_id = d.referencing_id',
-            default => throw new RuntimeException('Lada Cache cannot read view dependencies of driver '.$connection->getDriverName()),
+            default => throw new RuntimeException('Model Cache cannot read view dependencies of driver '.$connection->getDriverName()),
         };
 
         $pairs = [];
@@ -466,7 +466,7 @@ final class DependentTables
                 self::rows($connection, "select name, tbl_name as table_name, sql as body from sqlite_master where type = 'trigger'"),
             ),
             'sqlsrv' => self::sqlServerTriggers($connection, $dialect),
-            default => throw new RuntimeException('Lada Cache cannot read triggers of driver '.$connection->getDriverName()),
+            default => throw new RuntimeException('Model Cache cannot read triggers of driver '.$connection->getDriverName()),
         };
     }
 
@@ -480,7 +480,7 @@ final class DependentTables
     private static function mySqlTrigger(Connection $connection, string $name, string $table, string $event): array
     {
         $created = self::rows($connection, 'show create trigger `'.str_replace('`', '``', $name).'`')[0]
-            ?? throw new UnexpectedValueException('Lada Cache read no definition of trigger '.json_encode($name));
+            ?? throw new UnexpectedValueException('Model Cache read no definition of trigger '.json_encode($name));
 
         return [
             'name' => $name,
@@ -536,7 +536,7 @@ final class DependentTables
             return [[TriggerEvent::Update], $columns];
         }
 
-        throw new UnexpectedValueException('Lada Cache cannot read the event of trigger '.json_encode($sql));
+        throw new UnexpectedValueException('Model Cache cannot read the event of trigger '.json_encode($sql));
     }
 
     /**

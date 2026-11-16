@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Application;
+namespace Kontainer\ModelCache\Tests\Integration\Application;
 
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\Database\Models\Application\Workspace;
+use Kontainer\ModelCache\Tests\Database\Models\Application\Workspace;
 
 final class JoinShapesTest extends ApplicationShapeTestCase
 {

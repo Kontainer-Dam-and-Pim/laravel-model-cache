@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
 use DebugBar\DebugBar;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -23,49 +23,49 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
+use Kontainer\ModelCache\Console\DisableCommand;
+use Kontainer\ModelCache\Console\EnableCommand;
+use Kontainer\ModelCache\Console\FlushCommand;
+use Kontainer\ModelCache\Console\InvalidateCommand;
+use Kontainer\ModelCache\Console\StatsCommand;
+use Kontainer\ModelCache\Database\MariaDbConnection as CachingMariaDbConnection;
+use Kontainer\ModelCache\Database\MySqlConnection as CachingMySqlConnection;
+use Kontainer\ModelCache\Database\PostgresConnection as CachingPostgresConnection;
+use Kontainer\ModelCache\Database\QueryBuilder;
+use Kontainer\ModelCache\Database\SqliteConnection as CachingSqliteConnection;
+use Kontainer\ModelCache\Database\SqlServerConnection as CachingSqlServerConnection;
+use Kontainer\ModelCache\Debug\CacheCollector;
+use Kontainer\ModelCache\Support\CacheOperation;
+use Kontainer\ModelCache\Support\ConfigValue;
+use Kontainer\ModelCache\Support\DependentTables;
+use Kontainer\ModelCache\Support\FailedInvalidations;
+use Kontainer\ModelCache\Support\FailureReporter;
+use Kontainer\ModelCache\Support\FrameworkTables;
+use Kontainer\ModelCache\Support\RedisCooldown;
+use Kontainer\ModelCache\Support\ReplicaReads;
+use Kontainer\ModelCache\Support\RetireReason;
 use LogicException;
-use Spiritix\LadaCache\Console\DisableCommand;
-use Spiritix\LadaCache\Console\EnableCommand;
-use Spiritix\LadaCache\Console\FlushCommand;
-use Spiritix\LadaCache\Console\InvalidateCommand;
-use Spiritix\LadaCache\Console\StatsCommand;
-use Spiritix\LadaCache\Database\MariaDbConnection as LadaMariaDbConnection;
-use Spiritix\LadaCache\Database\MySqlConnection as LadaMySqlConnection;
-use Spiritix\LadaCache\Database\PostgresConnection as LadaPostgresConnection;
-use Spiritix\LadaCache\Database\QueryBuilder;
-use Spiritix\LadaCache\Database\SqliteConnection as LadaSqliteConnection;
-use Spiritix\LadaCache\Database\SqlServerConnection as LadaSqlServerConnection;
-use Spiritix\LadaCache\Debug\CacheCollector;
-use Spiritix\LadaCache\Support\CacheOperation;
-use Spiritix\LadaCache\Support\ConfigValue;
-use Spiritix\LadaCache\Support\DependentTables;
-use Spiritix\LadaCache\Support\FailedInvalidations;
-use Spiritix\LadaCache\Support\FailureReporter;
-use Spiritix\LadaCache\Support\FrameworkTables;
-use Spiritix\LadaCache\Support\RedisCooldown;
-use Spiritix\LadaCache\Support\ReplicaReads;
-use Spiritix\LadaCache\Support\RetireReason;
 use Throwable;
 
 /**
- * Lada Cache service provider for Laravel.
+ * Model Cache service provider for Laravel.
  *
  * Registers bindings, database connection integration (via DB::extend()),
  * artisan commands, and optional Debugbar integration. Configuration
  * publishing is provided and the package's config is merged during registration.
  */
-final class LadaCacheServiceProvider extends ServiceProvider
+final class ModelCacheServiceProvider extends ServiceProvider
 {
-    public const CONFIG_FILE = 'lada-cache.php';
+    public const CONFIG_FILE = 'model-cache.php';
 
     private const array SINGLETONS = [Services::REDIS, Services::METRICS, Services::CACHE, Services::HANDLER];
 
-    private const array LADA_CONNECTIONS = [
-        'mysql' => LadaMySqlConnection::class,
-        'mariadb' => LadaMariaDbConnection::class,
-        'pgsql' => LadaPostgresConnection::class,
-        'sqlite' => LadaSqliteConnection::class,
-        'sqlsrv' => LadaSqlServerConnection::class,
+    private const array CACHING_CONNECTIONS = [
+        'mysql' => CachingMySqlConnection::class,
+        'mariadb' => CachingMariaDbConnection::class,
+        'pgsql' => CachingPostgresConnection::class,
+        'sqlite' => CachingSqliteConnection::class,
+        'sqlsrv' => CachingSqlServerConnection::class,
     ];
 
     public function boot(): void
@@ -74,8 +74,8 @@ final class LadaCacheServiceProvider extends ServiceProvider
             __DIR__.'/../config/'.self::CONFIG_FILE => config_path(self::CONFIG_FILE),
         ], 'config');
 
-        // Propagate withoutCache() from the Eloquent builder to the underlying Lada query builder.
-        // Registered outside the active guard so the call is a no-op when Lada is disabled.
+        // Propagate withoutCache() from the Eloquent builder to the underlying caching query builder.
+        // Registered outside the active guard so the call is a no-op when the cache is disabled.
         EloquentBuilder::macro('withoutCache', function () {
             /** @var EloquentBuilder<Model> $this */
             $query = $this->getQuery();
@@ -87,19 +87,19 @@ final class LadaCacheServiceProvider extends ServiceProvider
             return $this;
         });
 
-        // If Lada Cache is not active, avoid wiring listeners / debugbar that could resolve Redis.
-        if (! (bool) config('lada-cache.active', true)) {
+        // If Model Cache is not active, avoid wiring listeners / debugbar that could resolve Redis.
+        if (! (bool) config('model-cache.active', true)) {
             return;
         }
 
         $this->warmSingletonsUnderOctane();
 
-        config(['lada-cache.exclude_tables' => array_values(array_unique([
-            ...ConfigValue::strings('lada-cache.exclude_tables'),
+        config(['model-cache.exclude_tables' => array_values(array_unique([
+            ...ConfigValue::strings('model-cache.exclude_tables'),
             ...FrameworkTables::volatile(),
         ]))]);
 
-        if (config('lada-cache.enable_debugbar') && $this->app->bound('debugbar')) {
+        if (config('model-cache.enable_debugbar') && $this->app->bound('debugbar')) {
             $this->registerDebugbarCollector();
         }
 
@@ -144,11 +144,11 @@ final class LadaCacheServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(
             __DIR__.'/../config/'.self::CONFIG_FILE,
-            'lada-cache'
+            'model-cache'
         );
 
         // Only register when active to avoid bootstrap overhead when disabled
-        if ((bool) config('lada-cache.active', true) && $this->hasValidConfiguration()) {
+        if ((bool) config('model-cache.active', true) && $this->hasValidConfiguration()) {
             $this->registerSingletons();
             $this->registerDatabaseDecorator();
         }
@@ -176,10 +176,10 @@ final class LadaCacheServiceProvider extends ServiceProvider
     {
         try {
             CacheScope::fromConfig();
-            ConfigValue::strings('lada-cache.include_tables');
-            ConfigValue::strings('lada-cache.exclude_tables');
-            ConfigValue::string('lada-cache.prefix', Redis::DEFAULT_PREFIX);
-            ConfigValue::string('lada-cache.redis_connection', Redis::DEFAULT_CONNECTION);
+            ConfigValue::strings('model-cache.include_tables');
+            ConfigValue::strings('model-cache.exclude_tables');
+            ConfigValue::string('model-cache.prefix', Redis::DEFAULT_PREFIX);
+            ConfigValue::string('model-cache.redis_connection', Redis::DEFAULT_CONNECTION);
             ExpirationPolicy::fromConfig();
             EntrySizeLimit::fromConfig();
             ReplicaReads::configuredLagSeconds();
@@ -188,8 +188,8 @@ final class LadaCacheServiceProvider extends ServiceProvider
 
             return true;
         } catch (InvalidArgumentException $exception) {
-            Log::error('[LadaCache] Disabled because of invalid configuration: '.$exception->getMessage());
-            config(['lada-cache.active' => false]);
+            Log::error('[ModelCache] Disabled because of invalid configuration: '.$exception->getMessage());
+            config(['model-cache.active' => false]);
 
             return false;
         }
@@ -218,18 +218,18 @@ final class LadaCacheServiceProvider extends ServiceProvider
     }
 
     /**
-     * Copy driver-specific state from the base connection to the Lada connection.
+     * Copy driver-specific state from the base connection to the caching connection.
      */
-    private static function hydrateLadaConnection(Connection $base, Connection $lada): Connection
+    private static function hydrateCachingConnection(Connection $base, Connection $caching): Connection
     {
-        $lada->setReadPdo($base->getRawReadPdo());
-        $lada->setQueryGrammar($base->getQueryGrammar());
-        $lada->setPostProcessor($base->getPostProcessor());
+        $caching->setReadPdo($base->getRawReadPdo());
+        $caching->setQueryGrammar($base->getQueryGrammar());
+        $caching->setPostProcessor($base->getPostProcessor());
 
         $base->getSchemaBuilder();
-        $lada->setSchemaGrammar($base->getSchemaGrammar());
+        $caching->setSchemaGrammar($base->getSchemaGrammar());
 
-        return $lada;
+        return $caching;
     }
 
     /**
@@ -248,22 +248,22 @@ final class LadaCacheServiceProvider extends ServiceProvider
 
     private function registerDatabaseDecorator(): void
     {
-        foreach (self::LADA_CONNECTIONS as $driver => $class) {
-            DB::extend($driver, static fn (array $config, string $name): Connection => self::ladaConnection($class, $config, $name));
+        foreach (self::CACHING_CONNECTIONS as $driver => $class) {
+            DB::extend($driver, static fn (array $config, string $name): Connection => self::cachingConnection($class, $config, $name));
         }
     }
 
     /**
-     * @param  class-string<LadaMySqlConnection|LadaMariaDbConnection|LadaPostgresConnection|LadaSqliteConnection|LadaSqlServerConnection>  $class
+     * @param  class-string<CachingMySqlConnection|CachingMariaDbConnection|CachingPostgresConnection|CachingSqliteConnection|CachingSqlServerConnection>  $class
      * @param  array<mixed>  $config
      */
-    private static function ladaConnection(string $class, array $config, string $name): Connection
+    private static function cachingConnection(string $class, array $config, string $name): Connection
     {
         $base = Services::make('db.factory', ConnectionFactory::class)->make($config, $name);
         $baseConfig = $base->getConfig();
 
-        return self::hydrateLadaConnection($base, new $class(
-            $base->getRawPdo() ?? throw new LogicException("Database connection {$name} has no PDO to share with Lada Cache"),
+        return self::hydrateCachingConnection($base, new $class(
+            $base->getRawPdo() ?? throw new LogicException("Database connection {$name} has no PDO to share with Model Cache"),
             $base->getDatabaseName(),
             $base->getTablePrefix(),
             is_array($baseConfig) ? $baseConfig : throw new LogicException("Database connection {$name} has no configuration array"),
@@ -272,24 +272,24 @@ final class LadaCacheServiceProvider extends ServiceProvider
 
     private function registerCommands(): void
     {
-        $this->app->singleton('command.lada-cache.flush', static fn () => new FlushCommand);
-        $this->app->singleton('command.lada-cache.enable', static fn () => new EnableCommand);
-        $this->app->singleton('command.lada-cache.disable', static fn () => new DisableCommand);
-        $this->app->singleton('command.lada-cache.invalidate', static fn () => new InvalidateCommand);
-        $this->app->singleton('command.lada-cache.stats', static fn () => new StatsCommand);
+        $this->app->singleton('command.model-cache.flush', static fn () => new FlushCommand);
+        $this->app->singleton('command.model-cache.enable', static fn () => new EnableCommand);
+        $this->app->singleton('command.model-cache.disable', static fn () => new DisableCommand);
+        $this->app->singleton('command.model-cache.invalidate', static fn () => new InvalidateCommand);
+        $this->app->singleton('command.model-cache.stats', static fn () => new StatsCommand);
 
         $this->commands([
-            'command.lada-cache.flush',
-            'command.lada-cache.enable',
-            'command.lada-cache.disable',
-            'command.lada-cache.invalidate',
-            'command.lada-cache.stats',
+            'command.model-cache.flush',
+            'command.model-cache.enable',
+            'command.model-cache.disable',
+            'command.model-cache.invalidate',
+            'command.model-cache.stats',
         ]);
     }
 
     private function registerDebugbarCollector(): void
     {
         $this->app->singleton(Services::COLLECTOR, static fn (): CacheCollector => new CacheCollector);
-        Services::make('debugbar', DebugBar::class)->addCollector(Services::collector() ?? throw new LogicException('Lada Cache collector was not registered'));
+        Services::make('debugbar', DebugBar::class)->addCollector(Services::collector() ?? throw new LogicException('Model Cache collector was not registered'));
     }
 }

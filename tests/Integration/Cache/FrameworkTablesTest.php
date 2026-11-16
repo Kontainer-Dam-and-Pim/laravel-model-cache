@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Manager;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Support\FrameworkTables;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Manager;
+use Kontainer\ModelCache\Reflector;
+use Kontainer\ModelCache\Support\FrameworkTables;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class FrameworkTablesTest extends TestCase
 {
@@ -18,7 +18,7 @@ final class FrameworkTablesTest extends TestCase
 
         $app['config']->set('session.driver', 'database');
         $app['config']->set('session.table', 'web_sessions');
-        $app['config']->set('lada-cache.exclude_tables', ['audit_log']);
+        $app['config']->set('model-cache.exclude_tables', ['audit_log']);
     }
 
     public function testDatabaseBackedFrameworkTablesAreNotCached(): void
@@ -29,8 +29,8 @@ final class FrameworkTablesTest extends TestCase
 
     public function testConfiguredExclusionsAreKept(): void
     {
-        $this->assertContains('audit_log', config('lada-cache.exclude_tables'));
-        $this->assertContains('web_sessions', config('lada-cache.exclude_tables'));
+        $this->assertContains('audit_log', config('model-cache.exclude_tables'));
+        $this->assertContains('web_sessions', config('model-cache.exclude_tables'));
     }
 
     public function testOnlyStoresUsingTheDatabaseContributeTables(): void

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
-use Spiritix\LadaCache\Support\Sql\Dialect;
-use Spiritix\LadaCache\Support\Sql\SqlMemo;
-use Spiritix\LadaCache\Support\Sql\Tokenizer;
-use Spiritix\LadaCache\Support\Sql\TokenKind;
+use Kontainer\ModelCache\Support\Sql\Dialect;
+use Kontainer\ModelCache\Support\Sql\SqlMemo;
+use Kontainer\ModelCache\Support\Sql\Tokenizer;
+use Kontainer\ModelCache\Support\Sql\TokenKind;
 
 /**
  * Whether SQL calls a function whose result depends on time, randomness or the session, which

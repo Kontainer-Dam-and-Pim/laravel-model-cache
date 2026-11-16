@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Application;
+namespace Kontainer\ModelCache\Tests\Integration\Application;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\Database\Models\Application\Admin;
-use Spiritix\LadaCache\Tests\Database\Models\Application\AutomationRun;
-use Spiritix\LadaCache\Tests\Database\Models\Application\Element;
-use Spiritix\LadaCache\Tests\Database\Models\Application\ProviderSetting;
-use Spiritix\LadaCache\Tests\Database\Models\Application\Text;
-use Spiritix\LadaCache\Tests\Database\Models\Application\TextTranslation;
-use Spiritix\LadaCache\Tests\Database\Models\Application\Workspace;
+use Kontainer\ModelCache\Tests\Database\Models\Application\Admin;
+use Kontainer\ModelCache\Tests\Database\Models\Application\AutomationRun;
+use Kontainer\ModelCache\Tests\Database\Models\Application\Element;
+use Kontainer\ModelCache\Tests\Database\Models\Application\ProviderSetting;
+use Kontainer\ModelCache\Tests\Database\Models\Application\Text;
+use Kontainer\ModelCache\Tests\Database\Models\Application\TextTranslation;
+use Kontainer\ModelCache\Tests\Database\Models\Application\Workspace;
 
 final class RelationShapesTest extends ApplicationShapeTestCase
 {

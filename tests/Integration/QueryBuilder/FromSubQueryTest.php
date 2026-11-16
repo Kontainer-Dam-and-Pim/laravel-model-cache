@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
+namespace Kontainer\ModelCache\Tests\Integration\QueryBuilder;
 
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\Database\Models\Driver;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\Database\Models\Car;
+use Kontainer\ModelCache\Tests\Database\Models\Driver;
+use Kontainer\ModelCache\Tests\TestCase;
 
 /**
  * A fromSub() query reads the tables of its subquery, so writes to those tables must

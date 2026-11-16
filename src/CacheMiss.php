@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
 use InvalidArgumentException;
 
@@ -17,7 +17,7 @@ final readonly class CacheMiss
         public string $table = '',
     ) {
         if (preg_match(self::FINGERPRINT_PATTERN, $fingerprint) !== 1) {
-            throw new InvalidArgumentException(sprintf('Invalid Lada Cache fingerprint "%s", expected 40 lowercase hex characters', $fingerprint));
+            throw new InvalidArgumentException(sprintf('Invalid Model Cache fingerprint "%s", expected 40 lowercase hex characters', $fingerprint));
         }
     }
 }

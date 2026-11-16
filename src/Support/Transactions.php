@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 use Illuminate\Database\Connection;
 use Illuminate\Database\ConnectionInterface;
+use Kontainer\ModelCache\Database\RunsBuilderStatements;
 use PDO;
-use Spiritix\LadaCache\Database\RunsBuilderStatements;
 
 final class Transactions
 {

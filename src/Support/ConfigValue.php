@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 use InvalidArgumentException;
 
@@ -10,7 +10,7 @@ final class ConfigValue
 {
     /**
      * An empty string stands for no value, as an environment variable defined without one
-     * (`LADA_CACHE_EXPIRATION=`) yields it, and gives the default.
+     * (`MODEL_CACHE_EXPIRATION=`) yields it, and gives the default.
      */
     public static function integer(string $key, int $default): int
     {

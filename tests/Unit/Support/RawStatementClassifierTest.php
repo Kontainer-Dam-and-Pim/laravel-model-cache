@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit\Support;
+namespace Kontainer\ModelCache\Tests\Unit\Support;
 
+use Kontainer\ModelCache\Support\RawStatementClassifier;
+use Kontainer\ModelCache\Support\RawStatementEffect;
+use Kontainer\ModelCache\Support\Sql\Dialects;
+use Kontainer\ModelCache\Support\TransactionBoundary;
+use Kontainer\ModelCache\Support\Write;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Spiritix\LadaCache\Support\RawStatementClassifier;
-use Spiritix\LadaCache\Support\RawStatementEffect;
-use Spiritix\LadaCache\Support\Sql\Dialects;
-use Spiritix\LadaCache\Support\TransactionBoundary;
-use Spiritix\LadaCache\Support\Write;
 
 final class RawStatementClassifierTest extends TestCase
 {

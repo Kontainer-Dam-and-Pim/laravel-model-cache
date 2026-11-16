@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Database;
+namespace Kontainer\ModelCache\Database;
 
 use Illuminate\Database\PostgresConnection as BasePostgresConnection;
-use Spiritix\LadaCache\Services;
+use Kontainer\ModelCache\Services;
 
 /**
- * Lada Cache-aware Postgres connection.
+ * Model Cache-aware Postgres connection.
  */
 final class PostgresConnection extends BasePostgresConnection implements RunsBuilderStatements
 {
@@ -17,7 +17,7 @@ final class PostgresConnection extends BasePostgresConnection implements RunsBui
     /** {@inheritDoc} */
     public function query()
     {
-        if (! (bool) config('lada-cache.active', true)) {
+        if (! (bool) config('model-cache.active', true)) {
             return parent::query();
         }
 

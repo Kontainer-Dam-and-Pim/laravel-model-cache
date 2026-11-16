@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Eloquent;
+namespace Kontainer\ModelCache\Tests\Integration\Eloquent;
 
 use Illuminate\Support\Facades\DB;
+use Kontainer\ModelCache\Tests\Concerns\MakesTestModels;
+use Kontainer\ModelCache\Tests\Database\Models\Car;
+use Kontainer\ModelCache\Tests\Database\Models\Driver;
+use Kontainer\ModelCache\Tests\TestCase;
 use PHPUnit\Framework\Assert;
-use Spiritix\LadaCache\Tests\Concerns\MakesTestModels;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\Database\Models\Driver;
-use Spiritix\LadaCache\Tests\TestCase;
 
 /**
  * findMany()/whereKey() and BelongsTo eager loads on integer keys compile to whereIntegerInRaw.

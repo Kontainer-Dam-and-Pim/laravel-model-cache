@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support\Sql;
+namespace Kontainer\ModelCache\Support\Sql;
 
 /**
  * The tables a parsed write statement changes rows of. Multi-table forms name their targets by

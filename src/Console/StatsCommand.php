@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Console;
+namespace Kontainer\ModelCache\Console;
 
 use Illuminate\Console\Command;
-use Spiritix\LadaCache\Services;
-use Spiritix\LadaCache\Support\Metric;
+use Kontainer\ModelCache\Services;
+use Kontainer\ModelCache\Support\Metric;
 
 /**
- * Reports the counters `lada-cache.metrics` collects: per table hits, misses, stores and the
+ * Reports the counters `model-cache.metrics` collects: per table hits, misses, stores and the
  * invalidations it caused, and in total the retires, bypasses, failures and the statements that
  * cost hit rate.
  */
 final class StatsCommand extends Command
 {
-    protected $signature = 'lada-cache:stats
+    protected $signature = 'model-cache:stats
         {--hours=24 : How many hours back to report}
         {--table= : Report this table only}
         {--json : Print the report as JSON}';
 
-    protected $description = 'Report what the Lada Cache metrics counted.';
+    protected $description = 'Report what the Model Cache metrics counted.';
 
     private const array TABLE_METRICS = [Metric::Hit, Metric::Miss, Metric::Store, Metric::SkippedForSize, Metric::Invalidation, Metric::Cascade];
 
@@ -29,7 +29,7 @@ final class StatsCommand extends Command
         $metrics = Services::metrics();
 
         if (! $metrics->isEnabled()) {
-            $this->info('Lada Cache metrics are off. Set LADA_CACHE_METRICS=true to collect them.');
+            $this->info('Model Cache metrics are off. Set MODEL_CACHE_METRICS=true to collect them.');
 
             return self::SUCCESS;
         }

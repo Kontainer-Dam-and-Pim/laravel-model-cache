@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit\Support;
+namespace Kontainer\ModelCache\Tests\Unit\Support;
 
+use Kontainer\ModelCache\LuaScripts;
+use Kontainer\ModelCache\Support\ColumnKeys;
+use Kontainer\ModelCache\Support\ColumnType;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Spiritix\LadaCache\LuaScripts;
-use Spiritix\LadaCache\Support\ColumnKeys;
-use Spiritix\LadaCache\Support\ColumnType;
 
 final class ColumnKeysTest extends TestCase
 {

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Fuzz;
+namespace Kontainer\ModelCache\Tests\Fuzz;
 
+use Kontainer\ModelCache\Support\RawStatementClassifier;
+use Kontainer\ModelCache\Support\Sql\Dialects;
+use Kontainer\ModelCache\Tests\Fuzz\Support\Workload;
 use PHPUnit\Framework\TestCase;
 use Random\Engine\Mt19937;
 use Random\Randomizer;
-use Spiritix\LadaCache\Support\RawStatementClassifier;
-use Spiritix\LadaCache\Support\Sql\Dialects;
-use Spiritix\LadaCache\Tests\Fuzz\Support\Workload;
 
 /**
  * Generates writes to a known table, decorated the ways hand-written SQL varies, and checks

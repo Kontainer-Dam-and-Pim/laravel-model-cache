@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
+namespace Kontainer\ModelCache\Tests\Integration\QueryBuilder;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Tagger;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Reflector;
+use Kontainer\ModelCache\Tagger;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class UnionSubqueryTest extends TestCase
 {

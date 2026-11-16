@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Database;
+namespace Kontainer\ModelCache\Database;
 
 use Closure;
 use Illuminate\Contracts\Database\Query\Expression as ExpressionContract;
@@ -14,15 +14,15 @@ use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
+use Kontainer\ModelCache\QueryHandler;
+use Kontainer\ModelCache\Reflector;
+use Kontainer\ModelCache\Support\AssignedRows;
+use Kontainer\ModelCache\Support\SqlAliasParser;
+use Kontainer\ModelCache\Support\Write;
 use LogicException;
-use Spiritix\LadaCache\QueryHandler;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Support\AssignedRows;
-use Spiritix\LadaCache\Support\SqlAliasParser;
-use Spiritix\LadaCache\Support\Write;
 
 /**
- * LadaCache Query Builder for Laravel 12+
+ * Model Cache query builder for Laravel 12+
  *
  * Extends the base query builder to provide automatic caching and invalidation.
  */
@@ -51,7 +51,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     }
 
     /**
-     * Bypass Lada Cache for this query (skips read caching and write invalidation).
+     * Bypass Model Cache for this query (skips read caching and write invalidation).
      */
     public function withoutCache(): static
     {
@@ -72,7 +72,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
             return parent::exists();
         }
 
-        return $this->clone()->limit(1)->get([new Expression('1 as lada_exists')])->isNotEmpty();
+        return $this->clone()->limit(1)->get([new Expression('1 as model_cache_exists')])->isNotEmpty();
     }
 
     public function getHandler(): QueryHandler
@@ -82,7 +82,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
 
     public function getConnection(): Connection
     {
-        return $this->connection instanceof Connection ? $this->connection : throw new LogicException('Lada Cache query builders run on database connections, got '.get_debug_type($this->connection));
+        return $this->connection instanceof Connection ? $this->connection : throw new LogicException('Model Cache query builders run on database connections, got '.get_debug_type($this->connection));
     }
 
     public function getModel(): ?Model

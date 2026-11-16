@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Eloquent;
+namespace Kontainer\ModelCache\Tests\Integration\Eloquent;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Hasher;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Tagger;
-use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Hasher;
+use Kontainer\ModelCache\Reflector;
+use Kontainer\ModelCache\Tagger;
+use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class TransactionInvalidationTest extends TestCase
 {

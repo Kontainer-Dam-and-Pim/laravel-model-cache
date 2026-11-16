@@ -2,24 +2,24 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
-use Spiritix\LadaCache\Support\Sql\DeleteStatement;
-use Spiritix\LadaCache\Support\Sql\Dialect;
-use Spiritix\LadaCache\Support\Sql\InsertStatement;
-use Spiritix\LadaCache\Support\Sql\MergeStatement;
-use Spiritix\LadaCache\Support\Sql\MsSqlDialect;
-use Spiritix\LadaCache\Support\Sql\MySqlDialect;
-use Spiritix\LadaCache\Support\Sql\Parser;
-use Spiritix\LadaCache\Support\Sql\ParserException;
-use Spiritix\LadaCache\Support\Sql\SqlMemo;
-use Spiritix\LadaCache\Support\Sql\Token;
-use Spiritix\LadaCache\Support\Sql\Tokenizer;
-use Spiritix\LadaCache\Support\Sql\TokenizerException;
-use Spiritix\LadaCache\Support\Sql\TokenKind;
-use Spiritix\LadaCache\Support\Sql\TruncateStatement;
-use Spiritix\LadaCache\Support\Sql\UpdateStatement;
-use Spiritix\LadaCache\Support\Sql\WriteTargets;
+use Kontainer\ModelCache\Support\Sql\DeleteStatement;
+use Kontainer\ModelCache\Support\Sql\Dialect;
+use Kontainer\ModelCache\Support\Sql\InsertStatement;
+use Kontainer\ModelCache\Support\Sql\MergeStatement;
+use Kontainer\ModelCache\Support\Sql\MsSqlDialect;
+use Kontainer\ModelCache\Support\Sql\MySqlDialect;
+use Kontainer\ModelCache\Support\Sql\Parser;
+use Kontainer\ModelCache\Support\Sql\ParserException;
+use Kontainer\ModelCache\Support\Sql\SqlMemo;
+use Kontainer\ModelCache\Support\Sql\Token;
+use Kontainer\ModelCache\Support\Sql\Tokenizer;
+use Kontainer\ModelCache\Support\Sql\TokenizerException;
+use Kontainer\ModelCache\Support\Sql\TokenKind;
+use Kontainer\ModelCache\Support\Sql\TruncateStatement;
+use Kontainer\ModelCache\Support\Sql\UpdateStatement;
+use Kontainer\ModelCache\Support\Sql\WriteTargets;
 
 /**
  * Classifies SQL run outside the query builder by parsing it: statements known to be free of

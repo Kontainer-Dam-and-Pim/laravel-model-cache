@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\JoinClause;
-use Spiritix\LadaCache\Database\QueryBuilder;
+use Kontainer\ModelCache\Database\QueryBuilder;
 use UnexpectedValueException;
 
 /**

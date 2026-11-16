@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Console;
+namespace Kontainer\ModelCache\Tests\Console;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Metrics;
-use Spiritix\LadaCache\Services;
-use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Metrics;
+use Kontainer\ModelCache\Services;
+use Kontainer\ModelCache\Tests\Concerns\RecordsRedisCommands;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class StatsCommandTest extends TestCase
 {
@@ -16,8 +16,8 @@ final class StatsCommandTest extends TestCase
 
     public function testSaysWhenMetricsAreOff(): void
     {
-        $this->artisan('lada-cache:stats')
-            ->expectsOutput('Lada Cache metrics are off. Set LADA_CACHE_METRICS=true to collect them.')
+        $this->artisan('model-cache:stats')
+            ->expectsOutput('Model Cache metrics are off. Set MODEL_CACHE_METRICS=true to collect them.')
             ->assertExitCode(0);
     }
 

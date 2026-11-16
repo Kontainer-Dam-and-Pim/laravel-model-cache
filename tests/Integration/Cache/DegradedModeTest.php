@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Spiritix\LadaCache\Database\QueryBuilder;
-use Spiritix\LadaCache\LadaCacheServiceProvider;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Database\QueryBuilder;
+use Kontainer\ModelCache\ModelCacheServiceProvider;
+use Kontainer\ModelCache\Tests\Database\Models\Car;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class DegradedModeTest extends TestCase
 {
@@ -27,7 +27,7 @@ final class DegradedModeTest extends TestCase
 
     public function testModelsAndQueryBuilderWorkWhileRedisIsUnreachable(): void
     {
-        $this->pointLadaAtUnreachableRedis();
+        $this->pointCacheAtUnreachableRedis();
 
         $car = Car::create(['name' => 'created']);
         $car->update(['name' => 'updated']);
@@ -43,27 +43,27 @@ final class DegradedModeTest extends TestCase
 
     public function testInvalidScopeDisablesTheCacheInsteadOfCrashing(): void
     {
-        $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.scope' => 'everything']);
+        $this->assertInvalidConfigurationDisablesTheCache(['model-cache.scope' => 'everything']);
     }
 
     public function testInvalidExpirationJitterDisablesTheCacheInsteadOfCrashing(): void
     {
-        $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.expiration_jitter' => 150]);
+        $this->assertInvalidConfigurationDisablesTheCache(['model-cache.expiration_jitter' => 150]);
     }
 
     public function testNonStringPrefixDisablesTheCacheInsteadOfCrashing(): void
     {
-        $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.prefix' => ['lada:']]);
+        $this->assertInvalidConfigurationDisablesTheCache(['model-cache.prefix' => ['model-cache:']]);
     }
 
     public function testNonStringRedisConnectionDisablesTheCacheInsteadOfCrashing(): void
     {
-        $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.redis_connection' => 7]);
+        $this->assertInvalidConfigurationDisablesTheCache(['model-cache.redis_connection' => 7]);
     }
 
     public function testNonStringExcludedTableDisablesTheCacheInsteadOfCrashing(): void
     {
-        $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.exclude_tables' => ['cars', ['engines']]]);
+        $this->assertInvalidConfigurationDisablesTheCache(['model-cache.exclude_tables' => ['cars', ['engines']]]);
     }
 
     /**
@@ -75,19 +75,19 @@ final class DegradedModeTest extends TestCase
         DB::table('cars')->insert(['id' => 1, 'name' => 'plain', 'engine_id' => null, 'driver_id' => null]);
         config($invalidConfiguration);
 
-        (new LadaCacheServiceProvider($this->app))->register();
+        (new ModelCacheServiceProvider($this->app))->register();
 
-        $this->assertFalse((bool) config('lada-cache.active'));
+        $this->assertFalse((bool) config('model-cache.active'));
         $this->assertNotInstanceOf(QueryBuilder::class, DB::table('cars'));
         $this->assertSame('plain', Car::query()->find(1)?->name);
         Log::shouldHaveReceived('error')->once();
     }
 
-    private function pointLadaAtUnreachableRedis(): void
+    private function pointCacheAtUnreachableRedis(): void
     {
-        config(['lada-cache.redis_connection' => 'unreachable']);
+        config(['model-cache.redis_connection' => 'unreachable']);
 
-        foreach (['lada.redis', 'lada.cache', 'lada.handler'] as $binding) {
+        foreach (['model-cache.redis', 'model-cache.cache', 'model-cache.handler'] as $binding) {
             $this->app->forgetInstance($binding);
         }
     }

@@ -2,34 +2,34 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
 use Closure;
 use Illuminate\Database\Connection;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
+use Kontainer\ModelCache\Database\QueryBuilder;
+use Kontainer\ModelCache\Debug\CacheCollector;
+use Kontainer\ModelCache\Support\AssignedRows;
+use Kontainer\ModelCache\Support\BypassReason;
+use Kontainer\ModelCache\Support\CacheOperation;
+use Kontainer\ModelCache\Support\CascadeRead;
+use Kontainer\ModelCache\Support\ColumnKeys;
+use Kontainer\ModelCache\Support\DependentTables;
+use Kontainer\ModelCache\Support\FailedInvalidations;
+use Kontainer\ModelCache\Support\FailureReporter;
+use Kontainer\ModelCache\Support\Invalidation;
+use Kontainer\ModelCache\Support\Metric;
+use Kontainer\ModelCache\Support\PendingInvalidations;
+use Kontainer\ModelCache\Support\RawStatementEffect;
+use Kontainer\ModelCache\Support\RedisCooldown;
+use Kontainer\ModelCache\Support\ReplicaReads;
+use Kontainer\ModelCache\Support\RetireReason;
+use Kontainer\ModelCache\Support\StatementShape;
+use Kontainer\ModelCache\Support\TableName;
+use Kontainer\ModelCache\Support\Transactions;
+use Kontainer\ModelCache\Support\Write;
 use LogicException;
-use Spiritix\LadaCache\Database\QueryBuilder;
-use Spiritix\LadaCache\Debug\CacheCollector;
-use Spiritix\LadaCache\Support\AssignedRows;
-use Spiritix\LadaCache\Support\BypassReason;
-use Spiritix\LadaCache\Support\CacheOperation;
-use Spiritix\LadaCache\Support\CascadeRead;
-use Spiritix\LadaCache\Support\ColumnKeys;
-use Spiritix\LadaCache\Support\DependentTables;
-use Spiritix\LadaCache\Support\FailedInvalidations;
-use Spiritix\LadaCache\Support\FailureReporter;
-use Spiritix\LadaCache\Support\Invalidation;
-use Spiritix\LadaCache\Support\Metric;
-use Spiritix\LadaCache\Support\PendingInvalidations;
-use Spiritix\LadaCache\Support\RawStatementEffect;
-use Spiritix\LadaCache\Support\RedisCooldown;
-use Spiritix\LadaCache\Support\ReplicaReads;
-use Spiritix\LadaCache\Support\RetireReason;
-use Spiritix\LadaCache\Support\StatementShape;
-use Spiritix\LadaCache\Support\TableName;
-use Spiritix\LadaCache\Support\Transactions;
-use Spiritix\LadaCache\Support\Write;
 use Throwable;
 
 /**
@@ -89,7 +89,7 @@ final class QueryHandler
             $tags = $tagger->getTags();
             $invalidation = Invalidation::ofWrite($tags, $tagger->tableWideTags(), ReplicaReads::lagSeconds($connection))->withChangesOf(
                 $reflector->getDatabase(),
-                $connection->getName() ?? throw new LogicException('Lada Cache invalidates writes on named connections only'),
+                $connection->getName() ?? throw new LogicException('Model Cache invalidates writes on named connections only'),
                 self::narrowedToDeletedKeys($write, $builder, $reflector),
                 $reflector->getTables(),
             );

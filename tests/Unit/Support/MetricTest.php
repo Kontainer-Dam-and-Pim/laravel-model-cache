@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit\Support;
+namespace Kontainer\ModelCache\Tests\Unit\Support;
 
+use Kontainer\ModelCache\LuaScripts;
+use Kontainer\ModelCache\Support\Metric;
+use Kontainer\ModelCache\Support\StatementShape;
 use PHPUnit\Framework\TestCase;
-use Spiritix\LadaCache\LuaScripts;
-use Spiritix\LadaCache\Support\Metric;
-use Spiritix\LadaCache\Support\StatementShape;
 
 final class MetricTest extends TestCase
 {

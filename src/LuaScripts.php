@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
+use Kontainer\ModelCache\Support\ColumnKeys;
+use Kontainer\ModelCache\Support\ColumnType;
+use Kontainer\ModelCache\Support\DependentTables;
+use Kontainer\ModelCache\Support\Metric;
+use Kontainer\ModelCache\Support\RetireReason;
+use Kontainer\ModelCache\Support\Write;
 use ReflectionClass;
-use Spiritix\LadaCache\Support\ColumnKeys;
-use Spiritix\LadaCache\Support\ColumnType;
-use Spiritix\LadaCache\Support\DependentTables;
-use Spiritix\LadaCache\Support\Metric;
-use Spiritix\LadaCache\Support\RetireReason;
-use Spiritix\LadaCache\Support\Write;
 
 /**
  * Atomic Redis operations backing the cache.
  *
- * Every script receives the full key base (connection prefix plus Lada prefix) as ARGV[1],
+ * Every script receives the full key base (connection prefix plus cache prefix) as ARGV[1],
  * prepended by `Redis::evaluate()`, and builds keys itself, so all keys share one layout
  * regardless of the Redis client:
  *

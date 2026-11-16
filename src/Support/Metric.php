@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 /**
  * What the metrics count. Each counter is a field `<metric>:<label>` of a time bucket's hash:

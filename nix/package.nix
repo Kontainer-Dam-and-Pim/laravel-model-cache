@@ -8,7 +8,7 @@
     }:
     {
       packages.default = pkgs.php84.buildComposerProject2 {
-        pname = "lada-cache";
+        pname = "laravel-model-cache";
         version = "0.0.0";
         composer = inputs'.maestro.packages.maestro;
 

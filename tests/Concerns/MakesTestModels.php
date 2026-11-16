@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Concerns;
+namespace Kontainer\ModelCache\Tests\Concerns;
 
 use Illuminate\Database\Eloquent\Model;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\Database\Models\CarMaterial;
-use Spiritix\LadaCache\Tests\Database\Models\Driver;
-use Spiritix\LadaCache\Tests\Database\Models\Engine;
-use Spiritix\LadaCache\Tests\Database\Models\Material;
+use Kontainer\ModelCache\Tests\Database\Models\Car;
+use Kontainer\ModelCache\Tests\Database\Models\CarMaterial;
+use Kontainer\ModelCache\Tests\Database\Models\Driver;
+use Kontainer\ModelCache\Tests\Database\Models\Engine;
+use Kontainer\ModelCache\Tests\Database\Models\Material;
 
 trait MakesTestModels
 {

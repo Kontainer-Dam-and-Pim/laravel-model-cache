@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
-use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
+use Kontainer\ModelCache\Tests\Concerns\RecordsRedisCommands;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class RawStatementInvalidationTest extends TestCase
 {
@@ -158,8 +158,8 @@ final class RawStatementInvalidationTest extends TestCase
         DB::select('select * from drivers');
         DB::statement(match (self::databaseDriver()) {
             'sqlite' => 'PRAGMA foreign_keys = ON',
-            'pgsql' => "SET application_name = 'lada'",
-            default => 'SET @lada_probe = 1',
+            'pgsql' => "SET application_name = 'model-cache'",
+            default => 'SET @model_cache_probe = 1',
         });
         DB::statement('create temporary table report_rows (id integer)');
 

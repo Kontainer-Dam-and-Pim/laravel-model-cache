@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Database\Models;
+namespace Kontainer\ModelCache\Tests\Database\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Spiritix\LadaCache\Database\LadaCacheTrait;
+use Kontainer\ModelCache\Database\ModelCacheTrait;
 
 class CarMaterial extends Model
 {
-    use HasFactory, LadaCacheTrait;
+    use HasFactory, ModelCacheTrait;
 
     protected $table = 'car_material';
 

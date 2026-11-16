@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Database;
+namespace Kontainer\ModelCache\Database;
 
 use Illuminate\Contracts\Database\Query\Expression as ExpressionContract;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\JoinClause as BaseJoinClause;
+use Kontainer\ModelCache\QueryHandler;
 use LogicException;
-use Spiritix\LadaCache\QueryHandler;
 
 /**
- * Lada Cache-aware join clause.
+ * Model Cache-aware join clause.
  *
  * Extends Laravel's JoinClause to properly instantiate QueryBuilder instances
  * with the required QueryHandler when creating nested query builders.
@@ -58,7 +58,7 @@ class JoinClause extends BaseJoinClause implements HasCompiledSubQueries
         }
 
         if (! is_a($class, QueryBuilder::class, true) || ! $this->parentConnection instanceof Connection) {
-            throw new LogicException('Join clause parent '.$class.' carries a Lada Cache handler but is not a Lada Cache query builder on a database connection');
+            throw new LogicException('Join clause parent '.$class.' carries a Model Cache handler but is not a Model Cache query builder on a database connection');
         }
 
         return new $class(

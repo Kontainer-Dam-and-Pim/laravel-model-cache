@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Eloquent;
+namespace Kontainer\ModelCache\Tests\Integration\Eloquent;
 
+use Kontainer\ModelCache\Tests\Concerns\MakesTestModels;
+use Kontainer\ModelCache\Tests\Database\Models\Car;
+use Kontainer\ModelCache\Tests\TestCase;
 use PHPUnit\Framework\Assert;
-use Spiritix\LadaCache\Tests\Concerns\MakesTestModels;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\TestCase;
 
 class SoftDeletesTest extends TestCase
 {

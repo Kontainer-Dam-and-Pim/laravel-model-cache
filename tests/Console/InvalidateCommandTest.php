@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Console;
+namespace Kontainer\ModelCache\Tests\Console;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\Database\Models\Car;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class InvalidateCommandTest extends TestCase
 {
@@ -27,7 +27,7 @@ final class InvalidateCommandTest extends TestCase
         $this->writeBypassingLaravel("update cars set name = 'after'");
         $this->writeBypassingLaravel("update drivers set name = 'after'");
 
-        $this->artisan('lada-cache:invalidate', ['tables' => ['cars']])
+        $this->artisan('model-cache:invalidate', ['tables' => ['cars']])
             ->expectsOutput('Invalidated the cached reads of: cars')
             ->assertExitCode(0);
 
@@ -41,7 +41,7 @@ final class InvalidateCommandTest extends TestCase
         $this->assertSame('before', Car::query()->find(1)?->name);
         $this->writeBypassingLaravel("update cars set name = 'after'");
 
-        $this->artisan('lada-cache:invalidate', ['tables' => ['cars', 'carz']])
+        $this->artisan('model-cache:invalidate', ['tables' => ['cars', 'carz']])
             ->expectsOutput('Unknown tables on connection '.DB::getDefaultConnection().': carz')
             ->assertExitCode(1);
 
@@ -51,22 +51,22 @@ final class InvalidateCommandTest extends TestCase
     public function testFailsWhileRedisRejectsTheInvalidation(): void
     {
         $this->app['config']->set('database.redis.unreachable', ['host' => '127.0.0.1', 'port' => 1, 'timeout' => 0.2, 'read_write_timeout' => 0.2]);
-        config(['lada-cache.redis_connection' => 'unreachable']);
-        foreach (['lada.redis', 'lada.cache', 'lada.handler'] as $binding) {
+        config(['model-cache.redis_connection' => 'unreachable']);
+        foreach (['model-cache.redis', 'model-cache.cache', 'model-cache.handler'] as $binding) {
             $this->app->forgetInstance($binding);
         }
 
-        $this->artisan('lada-cache:invalidate', ['tables' => ['cars']])
+        $this->artisan('model-cache:invalidate', ['tables' => ['cars']])
             ->expectsOutput('Redis rejected the invalidation; it is kept and replayed once Redis accepts it.')
             ->assertExitCode(1);
     }
 
     public function testFailsWhenDisabled(): void
     {
-        config(['lada-cache.active' => false]);
+        config(['model-cache.active' => false]);
 
-        $this->artisan('lada-cache:invalidate', ['tables' => ['cars']])
-            ->expectsOutput('Lada Cache is disabled. Nothing was invalidated.')
+        $this->artisan('model-cache:invalidate', ['tables' => ['cars']])
+            ->expectsOutput('Model Cache is disabled. Nothing was invalidated.')
             ->assertExitCode(1);
     }
 

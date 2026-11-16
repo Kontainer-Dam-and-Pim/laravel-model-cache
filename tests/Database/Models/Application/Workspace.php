@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Database\Models\Application;
+namespace Kontainer\ModelCache\Tests\Database\Models\Application;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Spiritix\LadaCache\Database\LadaCacheTrait;
+use Kontainer\ModelCache\Database\ModelCacheTrait;
 
 final class Workspace extends Model
 {
-    use LadaCacheTrait;
+    use ModelCacheTrait;
 
     public const CREATED_AT = 'created_at';
 

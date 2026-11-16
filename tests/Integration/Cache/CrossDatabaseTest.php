@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class CrossDatabaseTest extends TestCase
 {
-    private const string OTHER_DATABASE = 'lada_other';
+    private const string OTHER_DATABASE = 'model_cache_other';
 
     protected function setUp(): void
     {

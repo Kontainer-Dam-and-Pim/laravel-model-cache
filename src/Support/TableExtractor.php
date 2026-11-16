@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\JoinClause;
-use Spiritix\LadaCache\Database\HasCompiledSubQueries;
-use Spiritix\LadaCache\Support\Sql\Dialects;
+use Kontainer\ModelCache\Database\HasCompiledSubQueries;
+use Kontainer\ModelCache\Support\Sql\Dialects;
 
 /**
  * Utility to extract table names (as strings) from a Laravel Query Builder.

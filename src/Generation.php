@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
 use InvalidArgumentException;
 
@@ -14,7 +14,7 @@ final readonly class Generation
         public string $id,
     ) {
         if (preg_match(self::ID_PATTERN, $id) !== 1) {
-            throw new InvalidArgumentException(sprintf('Invalid Lada Cache generation id "%s", expected 32 lowercase hex characters', $id));
+            throw new InvalidArgumentException(sprintf('Invalid Model Cache generation id "%s", expected 32 lowercase hex characters', $id));
         }
     }
 }

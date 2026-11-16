@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Application;
+namespace Kontainer\ModelCache\Tests\Integration\Application;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\Database\Models\Application\AssistantPrompt;
-use Spiritix\LadaCache\Tests\Database\Models\Application\Automation;
-use Spiritix\LadaCache\Tests\Database\Models\Application\FeatureMetric;
-use Spiritix\LadaCache\Tests\Database\Models\Application\Workspace;
-use Spiritix\LadaCache\Tests\Database\Models\Application\WorkspaceGroup;
+use Kontainer\ModelCache\Tests\Database\Models\Application\AssistantPrompt;
+use Kontainer\ModelCache\Tests\Database\Models\Application\Automation;
+use Kontainer\ModelCache\Tests\Database\Models\Application\FeatureMetric;
+use Kontainer\ModelCache\Tests\Database\Models\Application\Workspace;
+use Kontainer\ModelCache\Tests\Database\Models\Application\WorkspaceGroup;
 
 final class RawAndWriteShapesTest extends ApplicationShapeTestCase
 {
@@ -129,7 +129,7 @@ final class RawAndWriteShapesTest extends ApplicationShapeTestCase
         DB::connection()->getPdo()->exec("update workspaces set name = 'renamed' where id = 3");
         $this->assertSame('gamma', Workspace::query()->find(3)?->name, 'Writes bypassing Laravel are invisible to the cache by design');
 
-        $this->artisan('lada-cache:invalidate', ['tables' => ['workspaces']])->assertExitCode(0);
+        $this->artisan('model-cache:invalidate', ['tables' => ['workspaces']])->assertExitCode(0);
 
         $this->assertSame('renamed', Workspace::query()->find(3)?->name);
     }

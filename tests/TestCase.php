@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests;
+namespace Kontainer\ModelCache\Tests;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
+use Kontainer\ModelCache\CacheMiss;
+use Kontainer\ModelCache\ModelCacheServiceProvider;
+use Kontainer\ModelCache\Support\DependentTables;
 use Orchestra\Testbench\TestCase as BaseTestCase;
-use Spiritix\LadaCache\CacheMiss;
-use Spiritix\LadaCache\LadaCacheServiceProvider;
-use Spiritix\LadaCache\Support\DependentTables;
 
 class TestCase extends BaseTestCase
 {
@@ -29,11 +29,11 @@ class TestCase extends BaseTestCase
         $this->artisan('migrate:fresh', $migrationParams);
 
         Factory::guessFactoryNamesUsing(static function (string $modelName): string {
-            return sprintf('Spiritix\\LadaCache\\Tests\\Database\\Factories\\%sFactory', class_basename($modelName));
+            return sprintf('Kontainer\\ModelCache\\Tests\\Database\\Factories\\%sFactory', class_basename($modelName));
         });
 
         // Ensure a clean cache for every test: flush configured Redis connection
-        $connection = (string) config('lada-cache.redis_connection', 'cache');
+        $connection = (string) config('model-cache.redis_connection', 'cache');
         Redis::connection($connection)->flushdb();
 
         if (function_exists('apcu_clear_cache')) {
@@ -50,7 +50,7 @@ class TestCase extends BaseTestCase
     protected function loadDependencyMap(): void
     {
         $connection = DB::connection();
-        $cache = app('lada.cache');
+        $cache = app('model-cache.cache');
         $lookup = $cache->lookup('dependency-map', [], []);
 
         if ($lookup instanceof CacheMiss) {
@@ -61,7 +61,7 @@ class TestCase extends BaseTestCase
     protected function getPackageProviders($app): array
     {
         return [
-            LadaCacheServiceProvider::class,
+            ModelCacheServiceProvider::class,
         ];
     }
 
@@ -135,7 +135,7 @@ class TestCase extends BaseTestCase
             ]);
         }
 
-        // If the database Redis has a prefix, Lada fails to flush the cache
+        // If the database Redis has a prefix, flushing the cache fails
         $app['config']->set('database.redis.options.prefix', false);
 
         // Configure Redis host and port via environment to support Docker (service name),

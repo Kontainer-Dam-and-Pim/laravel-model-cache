@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Concurrency;
+namespace Kontainer\ModelCache\Tests\Concurrency;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis as RedisFacade;
-use Spiritix\LadaCache\Tests\Fuzz\Support\Workload;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\Fuzz\Support\Workload;
+use Kontainer\ModelCache\Tests\TestCase;
 use Throwable;
 
 /**
@@ -39,7 +39,7 @@ final class MultiProcessTest extends TestCase
         for ($round = 1; $round <= self::ROUNDS; $round++) {
             $failures = $this->runWorkers($seed + $round * self::WORKERS, $steps);
 
-            $this->assertSame([], $failures, "Workers failed in round {$round} (LADA_FUZZ_SEED={$seed})");
+            $this->assertSame([], $failures, "Workers failed in round {$round} (MODEL_CACHE_FUZZ_SEED={$seed})");
 
             $verifier->sweep();
         }
@@ -57,7 +57,7 @@ final class MultiProcessTest extends TestCase
         $children = [];
 
         for ($worker = 0; $worker < self::WORKERS; $worker++) {
-            $report = (string) tempnam(sys_get_temp_dir(), 'lada-worker-');
+            $report = (string) tempnam(sys_get_temp_dir(), 'model-cache-worker-');
             $reports[] = $report;
             $pid = pcntl_fork();
 
@@ -113,9 +113,9 @@ final class MultiProcessTest extends TestCase
     private function releaseConnections(): void
     {
         DB::disconnect();
-        RedisFacade::purge((string) config('lada-cache.redis_connection'));
+        RedisFacade::purge((string) config('model-cache.redis_connection'));
 
-        foreach (['lada.redis', 'lada.cache', 'lada.handler'] as $binding) {
+        foreach (['model-cache.redis', 'model-cache.cache', 'model-cache.handler'] as $binding) {
             $this->app->forgetInstance($binding);
         }
     }

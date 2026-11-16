@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Database\Events\DatabaseRefreshed;
 use Illuminate\Database\Events\MigrationEnded;
 use Illuminate\Database\Events\SchemaLoaded;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Cache;
-use Spiritix\LadaCache\Encoder;
-use Spiritix\LadaCache\ExpirationPolicy;
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Support\RedisAvailability;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Cache;
+use Kontainer\ModelCache\Encoder;
+use Kontainer\ModelCache\ExpirationPolicy;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Support\RedisAvailability;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class SchemaChangeTest extends TestCase
 {

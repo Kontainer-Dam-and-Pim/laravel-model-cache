@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Eloquent;
+namespace Kontainer\ModelCache\Tests\Integration\Eloquent;
 
-use Spiritix\LadaCache\Tests\Database\Models\Driver;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\Database\Models\Driver;
+use Kontainer\ModelCache\Tests\TestCase;
 
 /**
  * Wheres that widen the row set (top-level OR, whereNot) must not scope a query to the rows

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
 use InvalidArgumentException;
-use Spiritix\LadaCache\Support\ConfigValue;
+use Kontainer\ModelCache\Support\ConfigValue;
 
 /**
  * Results larger than this are returned but not cached: storing and fetching them would block
@@ -18,13 +18,13 @@ final readonly class EntrySizeLimit
     public function __construct(public int $bytes)
     {
         if ($bytes < 0) {
-            throw new InvalidArgumentException(sprintf('Invalid lada-cache.max_entry_size %d, expected 0 for no limit or more bytes', $bytes));
+            throw new InvalidArgumentException(sprintf('Invalid model-cache.max_entry_size %d, expected 0 for no limit or more bytes', $bytes));
         }
     }
 
     public static function fromConfig(): self
     {
-        return new self(ConfigValue::integer('lada-cache.max_entry_size', self::DEFAULT_BYTES));
+        return new self(ConfigValue::integer('model-cache.max_entry_size', self::DEFAULT_BYTES));
     }
 
     public function allows(string $payload): bool

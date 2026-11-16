@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit;
+namespace Kontainer\ModelCache\Tests\Unit;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Hasher;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Hasher;
+use Kontainer\ModelCache\Reflector;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class HasherTest extends TestCase
 {

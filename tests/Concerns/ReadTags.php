@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Concerns;
+namespace Kontainer\ModelCache\Tests\Concerns;
 
-use Spiritix\LadaCache\Support\CascadeRead;
+use Kontainer\ModelCache\Support\CascadeRead;
 
 /**
  * What a read looks up: its tags and its tables as foreign key cascades into them see it.

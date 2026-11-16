@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Application;
+namespace Kontainer\ModelCache\Tests\Integration\Application;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\Database\Models\Application\Automation;
-use Spiritix\LadaCache\Tests\Database\Models\Application\AutomationTriggerEvent;
-use Spiritix\LadaCache\Tests\Database\Models\Application\FeatureMetric;
+use Kontainer\ModelCache\Tests\Database\Models\Application\Automation;
+use Kontainer\ModelCache\Tests\Database\Models\Application\AutomationTriggerEvent;
+use Kontainer\ModelCache\Tests\Database\Models\Application\FeatureMetric;
 
 final class CompositeKeyShapesTest extends ApplicationShapeTestCase
 {

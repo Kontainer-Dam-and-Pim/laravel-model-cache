@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\CacheMiss;
-use Spiritix\LadaCache\Redis as LadaRedis;
-use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\CacheMiss;
+use Kontainer\ModelCache\Redis as CacheRedis;
+use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class ConcurrencyTest extends TestCase
 {
@@ -19,7 +19,7 @@ class ConcurrencyTest extends TestCase
         DB::table('cars')->insert(['id' => 910, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
         $builder = DB::table('cars')->where('id', 910);
         [$key, $tags] = $this->cacheKeyAndTags($builder);
-        $cache = app('lada.cache');
+        $cache = app('model-cache.cache');
 
         $slowReader = $this->lookupRead($key, $tags);
         $this->assertInstanceOf(CacheMiss::class, $slowReader);
@@ -40,7 +40,7 @@ class ConcurrencyTest extends TestCase
         [$key, $tags] = $this->cacheKeyAndTags($builder);
         $this->assertCacheHas($key, $tags);
 
-        $redis = new LadaRedis;
+        $redis = new CacheRedis;
         $generation = (string) $redis->get($redis->prefix('generation'));
         $redis->del($redis->prefix($generation.':v:'.$tags->tags[0]));
 
@@ -54,7 +54,7 @@ class ConcurrencyTest extends TestCase
         $builder->get();
         [$key, $tags] = $this->cacheKeyAndTags($builder);
 
-        $redis = new LadaRedis;
+        $redis = new CacheRedis;
         $redis->del($redis->prefix('generation'));
 
         $this->assertCacheMissing($key, $tags);

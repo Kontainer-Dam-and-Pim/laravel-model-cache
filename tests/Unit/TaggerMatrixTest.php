@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit;
+namespace Kontainer\ModelCache\Tests\Unit;
 
 use Illuminate\Support\Facades\DB;
+use Kontainer\ModelCache\Reflector;
+use Kontainer\ModelCache\Tagger;
+use Kontainer\ModelCache\Tests\TestCase;
 use PHPUnit\Framework\Assert;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Tagger;
-use Spiritix\LadaCache\Tests\TestCase;
 
 final class TaggerMatrixTest extends TestCase
 {
     public function testSelectWhereInIdsIsSpecific(): void
     {
-        config(['lada-cache.consider_rows' => true]);
+        config(['model-cache.consider_rows' => true]);
         $b = DB::table('cars')->whereIn('id', [1, 2, 3]);
         $tags = (new Tagger(new Reflector($b)))->getTags();
         Assert::assertTrue($this->has($tags, ':table_specific:cars'));
@@ -26,7 +26,7 @@ final class TaggerMatrixTest extends TestCase
 
     public function testSelectWhereGreaterThanIdIsUnspecific(): void
     {
-        config(['lada-cache.consider_rows' => true]);
+        config(['model-cache.consider_rows' => true]);
         $b = DB::table('cars')->where('id', '>', 5);
         $tags = (new Tagger(new Reflector($b)))->getTags();
         Assert::assertTrue($this->has($tags, ':table_unspecific:cars'));
@@ -35,7 +35,7 @@ final class TaggerMatrixTest extends TestCase
 
     public function testSelectWithNonPkConditionsIsUnspecific(): void
     {
-        config(['lada-cache.consider_rows' => true]);
+        config(['model-cache.consider_rows' => true]);
         $b = DB::table('cars')->where('name', 'like', 'A%');
         $tags = (new Tagger(new Reflector($b)))->getTags();
         Assert::assertTrue($this->has($tags, ':table_unspecific:cars'));

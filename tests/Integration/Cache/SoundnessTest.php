@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use APCUIterator;
 use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Kontainer\ModelCache\Cache;
+use Kontainer\ModelCache\CacheMiss;
+use Kontainer\ModelCache\Encoder;
+use Kontainer\ModelCache\ExpirationPolicy;
+use Kontainer\ModelCache\QueryHandler;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Support\FailedInvalidations;
+use Kontainer\ModelCache\Support\Invalidation;
+use Kontainer\ModelCache\Support\RedisAvailability;
+use Kontainer\ModelCache\Support\RedisCooldown;
+use Kontainer\ModelCache\Support\Write;
+use Kontainer\ModelCache\Tests\TestCase;
 use RuntimeException;
-use Spiritix\LadaCache\Cache;
-use Spiritix\LadaCache\CacheMiss;
-use Spiritix\LadaCache\Encoder;
-use Spiritix\LadaCache\ExpirationPolicy;
-use Spiritix\LadaCache\QueryHandler;
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Support\FailedInvalidations;
-use Spiritix\LadaCache\Support\Invalidation;
-use Spiritix\LadaCache\Support\RedisAvailability;
-use Spiritix\LadaCache\Support\RedisCooldown;
-use Spiritix\LadaCache\Support\Write;
-use Spiritix\LadaCache\Tests\TestCase;
 
 final class SoundnessTest extends TestCase
 {
@@ -94,7 +94,7 @@ final class SoundnessTest extends TestCase
         config([
             "database.connections.{$connection}.read" => ['host' => [$host]],
             "database.connections.{$connection}.write" => ['host' => [$host]],
-            'lada-cache.replica_lag' => 30,
+            'model-cache.replica_lag' => 30,
         ]);
         DB::purge($connection);
         DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
@@ -124,7 +124,7 @@ final class SoundnessTest extends TestCase
     public function testInvalidationRejectedByRedisIsReplayedBeforeTheCacheIsReadAgain(): void
     {
         $failed = FailedInvalidations::processLocal();
-        $working = new QueryHandler(app('lada.cache'), $failed);
+        $working = new QueryHandler(app('model-cache.cache'), $failed);
         $unreachable = new QueryHandler($this->unreachableCache(), $failed);
         DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
         $read = fn (): array => $working->cacheQuery(DB::table('cars')->where('id', 1),
@@ -146,17 +146,17 @@ final class SoundnessTest extends TestCase
             $this->markTestSkipped('Needs APCu with apc.enable_cli=1, as PHP-FPM pools use it across requests.');
         }
 
-        $failingRequest = FailedInvalidations::detect('lada-cache:test-failed:', 60);
+        $failingRequest = FailedInvalidations::detect('model-cache:test-failed:', 60);
         $failingRequest->record(Invalidation::of(['t']));
 
-        $nextRequest = FailedInvalidations::detect('lada-cache:test-failed:', 60);
+        $nextRequest = FailedInvalidations::detect('model-cache:test-failed:', 60);
         $replayed = [];
         $nextRequest->replay(function (Invalidation $invalidation) use (&$replayed): void {
             $replayed = $invalidation->tags();
         });
 
         $this->assertSame(['t'], $replayed);
-        $this->assertFalse(FailedInvalidations::detect('lada-cache:test-failed:', 60)->hasPending());
+        $this->assertFalse(FailedInvalidations::detect('model-cache:test-failed:', 60)->hasPending());
     }
 
     public function testLargeBacklogsCollapseIntoRetiringTheCache(): void
@@ -177,14 +177,14 @@ final class SoundnessTest extends TestCase
     public function testSharedBacklogStaysBoundedDuringLongOutages(): void
     {
         $this->requireApcu();
-        $failed = FailedInvalidations::detect('lada-cache:test-bounded:', 60);
+        $failed = FailedInvalidations::detect('model-cache:test-bounded:', 60);
 
         foreach (range(0, FailedInvalidations::MAX_PENDING + 50) as $tag) {
             $failed->record(Invalidation::of(["tag-{$tag}"]));
         }
 
-        $this->assertLessThanOrEqual(FailedInvalidations::MAX_PENDING + 1, iterator_count(new APCUIterator('/^lada-cache:test-bounded:/')) - 1);
-        FailedInvalidations::detect('lada-cache:test-bounded:', 60)->replay(function (Invalidation $invalidation) use (&$replayed): void {
+        $this->assertLessThanOrEqual(FailedInvalidations::MAX_PENDING + 1, iterator_count(new APCUIterator('/^model-cache:test-bounded:/')) - 1);
+        FailedInvalidations::detect('model-cache:test-bounded:', 60)->replay(function (Invalidation $invalidation) use (&$replayed): void {
             $replayed = $invalidation;
         });
         $this->assertNotNull($replayed->retires);
@@ -193,12 +193,12 @@ final class SoundnessTest extends TestCase
     public function testUnreadableSharedInvalidationsRetireTheCache(): void
     {
         $this->requireApcu();
-        FailedInvalidations::detect('lada-cache:test-corrupt:', 60)->record(Invalidation::of(['t']));
-        foreach (new APCUIterator('/^lada-cache:test-corrupt:item:/') as $item) {
+        FailedInvalidations::detect('model-cache:test-corrupt:', 60)->record(Invalidation::of(['t']));
+        foreach (new APCUIterator('/^model-cache:test-corrupt:item:/') as $item) {
             apcu_store((string) $item['key'], 'not a serialized invalidation');
         }
 
-        FailedInvalidations::detect('lada-cache:test-corrupt:', 60)->replay(function (Invalidation $invalidation) use (&$replayed): void {
+        FailedInvalidations::detect('model-cache:test-corrupt:', 60)->replay(function (Invalidation $invalidation) use (&$replayed): void {
             $replayed = $invalidation;
         });
 
@@ -225,7 +225,7 @@ final class SoundnessTest extends TestCase
     public function testUnreadableForeignKeysRetireTheCacheInsteadOfBlockingIt(): void
     {
         $failed = FailedInvalidations::processLocal();
-        $handler = new QueryHandler(app('lada.cache'), $failed);
+        $handler = new QueryHandler(app('model-cache.cache'), $failed);
         $handler->cacheQuery(DB::table('cars'), fn (): array => []);
         $generation = $this->generationId();
         DB::connection()->beforeExecuting(static function (string $query): void {
@@ -242,7 +242,7 @@ final class SoundnessTest extends TestCase
 
     public function testAnUnreadableSchemaIsNotReadAgainOnEveryWrite(): void
     {
-        $handler = new QueryHandler(app('lada.cache'), FailedInvalidations::processLocal());
+        $handler = new QueryHandler(app('model-cache.cache'), FailedInvalidations::processLocal());
         $handler->cacheQuery(DB::table('cars'), fn (): array => []);
         $catalogReads = 0;
         DB::connection()->beforeExecuting(static function (string $query) use (&$catalogReads): void {
@@ -282,8 +282,8 @@ final class SoundnessTest extends TestCase
     {
         $failed = FailedInvalidations::processLocal();
         $failed->record(Invalidation::everything());
-        $this->app->instance('lada.handler', new QueryHandler(app('lada.cache'), $failed));
-        app('lada.cache')->lookup('k', ['t'], []);
+        $this->app->instance('model-cache.handler', new QueryHandler(app('model-cache.cache'), $failed));
+        app('model-cache.cache')->lookup('k', ['t'], []);
         $generation = $this->generationId();
 
         $this->app->terminate();
@@ -298,7 +298,7 @@ final class SoundnessTest extends TestCase
         $failed = FailedInvalidations::processLocal();
         $unreachable = new QueryHandler($this->unreachableCache($availability), $failed);
         $sameProcess = new QueryHandler(new Cache(new Redis(null, $availability), new Encoder), $failed);
-        $otherHost = new QueryHandler(app('lada.cache'), FailedInvalidations::processLocal());
+        $otherHost = new QueryHandler(app('model-cache.cache'), FailedInvalidations::processLocal());
         DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
         $read = fn (QueryHandler $handler): string => $handler->cacheQuery(
             DB::table('cars')->where('id', 1),
@@ -319,7 +319,7 @@ final class SoundnessTest extends TestCase
     {
         $failed = FailedInvalidations::processLocal();
         $unreachable = new QueryHandler($this->unreachableCache(), $failed);
-        $working = new QueryHandler(app('lada.cache'), $failed);
+        $working = new QueryHandler(app('model-cache.cache'), $failed);
         $generation = $this->generationId();
 
         $unreachable->schemaChanged(DB::connection());
@@ -337,10 +337,10 @@ final class SoundnessTest extends TestCase
 
     private function unreachableCache(?RedisAvailability $availability = null): Cache
     {
-        $configured = config('lada-cache.redis_connection');
-        config(['lada-cache.redis_connection' => 'unreachable']);
+        $configured = config('model-cache.redis_connection');
+        config(['model-cache.redis_connection' => 'unreachable']);
         $redis = new Redis(null, $availability ?? RedisAvailability::processLocal());
-        config(['lada-cache.redis_connection' => $configured]);
+        config(['model-cache.redis_connection' => $configured]);
 
         return new Cache($redis, new Encoder, new ExpirationPolicy(0));
     }

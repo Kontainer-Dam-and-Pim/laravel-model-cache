@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Database\Models\Application;
+namespace Kontainer\ModelCache\Tests\Database\Models\Application;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
-use Spiritix\LadaCache\Database\LadaCacheTrait;
+use Kontainer\ModelCache\Database\ModelCacheTrait;
 
 final class AutomationRun extends Model
 {
-    use LadaCacheTrait;
+    use ModelCacheTrait;
 
     public $timestamps = false;
 

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Log;
-use Spiritix\LadaCache\CacheUnavailableException;
-use Spiritix\LadaCache\Services;
+use Kontainer\ModelCache\CacheUnavailableException;
+use Kontainer\ModelCache\Services;
 use Throwable;
 
 final class FailureReporter
@@ -25,7 +25,7 @@ final class FailureReporter
             Services::metrics()->count(Metric::Failure, strtolower($operation->name));
         }
 
-        $message = "[LadaCache] Failed {$operation->value}, {$operation->consequenceOfFailure()}: {$exception->getMessage()}";
+        $message = "[ModelCache] Failed {$operation->value}, {$operation->consequenceOfFailure()}: {$exception->getMessage()}";
         $context = [...$context, 'exception' => $exception];
 
         if ($operation->compromisesFreshness()) {

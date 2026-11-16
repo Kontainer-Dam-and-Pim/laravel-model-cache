@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Debug;
+namespace Kontainer\ModelCache\Debug;
 
 use DebugBar\DataCollector\TimeDataCollector;
 
 /**
- * Lada Cache DebugBar collector.
+ * Model Cache DebugBar collector.
  *
- * Collects timing measures for Lada Cache operations and exposes them to
+ * Collects timing measures for Model Cache operations and exposes them to
  * the DebugBar timeline and badge widgets. This class extends DebugBar's
  * TimeDataCollector to integrate seamlessly with the existing DebugBar UI.
  */
@@ -53,7 +53,7 @@ final class CacheCollector extends TimeDataCollector
     public function collect(): array
     {
         $data = parent::collect();
-        $data['lada-measures'] = is_array($data['measures'] ?? null) ? count($data['measures']) : 0;
+        $data['model-cache-measures'] = is_array($data['measures'] ?? null) ? count($data['measures']) : 0;
 
         return $data;
     }
@@ -62,7 +62,7 @@ final class CacheCollector extends TimeDataCollector
     #[\Override]
     public function getName(): string
     {
-        return 'lada';
+        return 'model-cache';
     }
 
     /** {@inheritDoc} */
@@ -70,14 +70,14 @@ final class CacheCollector extends TimeDataCollector
     public function getWidgets(): array
     {
         return [
-            'Lada Cache' => [
+            'Model Cache' => [
                 'icon' => 'database',
                 'widget' => 'PhpDebugBar.Widgets.TimelineWidget',
-                'map' => 'lada',
+                'map' => 'model-cache',
                 'default' => '{}',
             ],
-            'Lada Cache:badge' => [
-                'map' => 'lada.lada-measures',
+            'Model Cache:badge' => [
+                'map' => 'model-cache.model-cache-measures',
                 'default' => 0,
             ],
         ];

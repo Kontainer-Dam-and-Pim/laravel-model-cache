@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Fuzz\Support;
+namespace Kontainer\ModelCache\Tests\Fuzz\Support;
 
 use Closure;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
@@ -11,17 +11,17 @@ use Illuminate\Database\Query\JoinClause;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis as RedisFacade;
+use Kontainer\ModelCache\Cache;
+use Kontainer\ModelCache\Encoder;
+use Kontainer\ModelCache\QueryHandler;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Support\FailedInvalidations;
+use Kontainer\ModelCache\Support\RedisAvailability;
+use Kontainer\ModelCache\Tests\Database\Models\Car;
+use Kontainer\ModelCache\Tests\Database\Models\Driver;
+use Kontainer\ModelCache\Tests\Database\Models\License;
 use Random\Engine\Mt19937;
 use Random\Randomizer;
-use Spiritix\LadaCache\Cache;
-use Spiritix\LadaCache\Encoder;
-use Spiritix\LadaCache\QueryHandler;
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Support\FailedInvalidations;
-use Spiritix\LadaCache\Support\RedisAvailability;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\Database\Models\Driver;
-use Spiritix\LadaCache\Tests\Database\Models\License;
 
 /**
  * Seeded random workload of reads, writes, transactions and cache disturbances against the
@@ -85,21 +85,21 @@ final class Workload
         }
 
         if ($allowCacheDisturbances) {
-            $this->healthyHandler = new QueryHandler(app('lada.cache'), $this->failedInvalidations);
-            app()->instance('lada.handler', $this->healthyHandler);
+            $this->healthyHandler = new QueryHandler(app('model-cache.cache'), $this->failedInvalidations);
+            app()->instance('model-cache.handler', $this->healthyHandler);
         }
     }
 
     public static function seedFromEnvironment(): int
     {
-        $seed = getenv('LADA_FUZZ_SEED');
+        $seed = getenv('MODEL_CACHE_FUZZ_SEED');
 
         return $seed === false || $seed === '' ? random_int(1, PHP_INT_MAX) : (int) $seed;
     }
 
     public static function iterationsFromEnvironment(int $default): int
     {
-        $iterations = getenv('LADA_FUZZ_ITERATIONS');
+        $iterations = getenv('MODEL_CACHE_FUZZ_ITERATIONS');
 
         return $iterations === false || $iterations === '' ? $default : max(1, (int) $iterations);
     }
@@ -508,15 +508,15 @@ final class Workload
             return;
         }
 
-        $redis = app('lada.redis');
+        $redis = app('model-cache.redis');
         assert($redis instanceof Redis);
-        $connection = RedisFacade::connection((string) config('lada-cache.redis_connection'));
+        $connection = RedisFacade::connection((string) config('model-cache.redis_connection'));
 
         match ($this->random->getInt(1, 4)) {
             4 => $this->startOutage(),
             1 => (function (): void {
                 $this->log('flush cache');
-                app('lada.cache')->flush();
+                app('model-cache.cache')->flush();
             })(),
             2 => (function () use ($connection): void {
                 $this->log('empty redis');
@@ -548,11 +548,11 @@ final class Workload
 
         $this->outageStepsLeft = $this->random->getInt(3, 15);
         $this->log("redis outage for {$this->outageStepsLeft} steps");
-        $configured = config('lada-cache.redis_connection');
-        config(['lada-cache.redis_connection' => self::UNCONFIGURED_REDIS_CONNECTION]);
+        $configured = config('model-cache.redis_connection');
+        config(['model-cache.redis_connection' => self::UNCONFIGURED_REDIS_CONNECTION]);
         $unreachable = new Cache(new Redis(null, RedisAvailability::processLocal()), new Encoder);
-        config(['lada-cache.redis_connection' => $configured]);
-        app()->instance('lada.handler', new QueryHandler($unreachable, $this->failedInvalidations));
+        config(['model-cache.redis_connection' => $configured]);
+        app()->instance('model-cache.handler', new QueryHandler($unreachable, $this->failedInvalidations));
     }
 
     private function advanceOutage(): void
@@ -570,12 +570,12 @@ final class Workload
             return;
         }
 
-        if (app('lada.handler') !== $this->healthyHandler) {
+        if (app('model-cache.handler') !== $this->healthyHandler) {
             $this->log('redis back');
         }
 
         $this->outageStepsLeft = 0;
-        app()->instance('lada.handler', $this->healthyHandler);
+        app()->instance('model-cache.handler', $this->healthyHandler);
     }
 
     private function inAnyTransaction(): bool
@@ -603,7 +603,7 @@ final class Workload
         }
 
         throw new StaleReadException(sprintf(
-            "Cached result of \"%s\" differs from the database.\nSeed: %d (rerun with LADA_FUZZ_SEED=%d)\nCached: %s\nDatabase: %s\nLast operations:\n  %s",
+            "Cached result of \"%s\" differs from the database.\nSeed: %d (rerun with MODEL_CACHE_FUZZ_SEED=%d)\nCached: %s\nDatabase: %s\nLast operations:\n  %s",
             $label,
             $this->seed,
             $this->seed,

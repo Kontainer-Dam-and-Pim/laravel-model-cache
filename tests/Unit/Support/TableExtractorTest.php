@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit\Support;
+namespace Kontainer\ModelCache\Tests\Unit\Support;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Support\TableExtractor;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Support\TableExtractor;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class TableExtractorTest extends TestCase
 {

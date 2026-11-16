@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Database\Factories;
+namespace Kontainer\ModelCache\Tests\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Spiritix\LadaCache\Tests\Database\Models\Engine;
+use Kontainer\ModelCache\Tests\Database\Models\Engine;
 
 class EngineFactory extends Factory
 {

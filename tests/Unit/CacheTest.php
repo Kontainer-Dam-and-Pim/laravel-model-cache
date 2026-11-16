@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit;
+namespace Kontainer\ModelCache\Tests\Unit;
 
 use InvalidArgumentException;
-use Spiritix\LadaCache\Cache;
-use Spiritix\LadaCache\CacheHit;
-use Spiritix\LadaCache\CacheMiss;
-use Spiritix\LadaCache\Encoder;
-use Spiritix\LadaCache\EntrySizeLimit;
-use Spiritix\LadaCache\ExpirationPolicy;
-use Spiritix\LadaCache\LuaScripts;
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Support\Invalidation;
-use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Cache;
+use Kontainer\ModelCache\CacheHit;
+use Kontainer\ModelCache\CacheMiss;
+use Kontainer\ModelCache\Encoder;
+use Kontainer\ModelCache\EntrySizeLimit;
+use Kontainer\ModelCache\ExpirationPolicy;
+use Kontainer\ModelCache\LuaScripts;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Support\Invalidation;
+use Kontainer\ModelCache\Tests\Concerns\RecordsRedisCommands;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class CacheTest extends TestCase
 {
@@ -29,7 +29,7 @@ class CacheTest extends TestCase
     {
         parent::setUp();
 
-        config(['lada-cache.prefix' => 'p:']);
+        config(['model-cache.prefix' => 'p:']);
 
         $this->redis = new Redis;
         $this->cache = new Cache($this->redis, new Encoder, new ExpirationPolicy(0));
@@ -145,7 +145,7 @@ class CacheTest extends TestCase
         $this->redis->set('p:generation', '7');
 
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Invalid Lada Cache generation id "7"');
+        $this->expectExceptionMessage('Invalid Model Cache generation id "7"');
 
         $this->cache->lookup('k', ['t'], []);
     }
@@ -247,7 +247,7 @@ class CacheTest extends TestCase
 
     public function testPruneTreatsGlobCharactersInThePrefixLiterally(): void
     {
-        config(['lada-cache.prefix' => 'g[1]*:']);
+        config(['model-cache.prefix' => 'g[1]*:']);
         $redis = new Redis;
         $cache = new Cache($redis, new Encoder, new ExpirationPolicy(0));
         $cache->retireCurrentGeneration();

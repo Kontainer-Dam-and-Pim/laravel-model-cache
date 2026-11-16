@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
 use Illuminate\Support\Facades\Config;
-use Spiritix\LadaCache\Support\BypassReason;
-use Spiritix\LadaCache\Support\ConfigValue;
-use Spiritix\LadaCache\Support\NonDeterministicSql;
+use Kontainer\ModelCache\Support\BypassReason;
+use Kontainer\ModelCache\Support\ConfigValue;
+use Kontainer\ModelCache\Support\NonDeterministicSql;
 
 /**
  * Manager decides whether the current query, as reflected by a `Reflector`, should be cached.
  *
  * Architectural notes:
  * - This class is immutable and declared as readonly; configuration values are captured at construction.
- * - Inclusion has precedence: when `lada-cache.include_tables` is non-empty, all referenced tables must be included.
- * - Otherwise an exclusion list `lada-cache.exclude_tables` is honored.
+ * - Inclusion has precedence: when `model-cache.include_tables` is non-empty, all referenced tables must be included.
+ * - Otherwise an exclusion list `model-cache.exclude_tables` is honored.
  */
 final readonly class Manager
 {
@@ -31,10 +31,10 @@ final readonly class Manager
 
     public function __construct(private Reflector $reflector)
     {
-        $this->cacheActive = (bool) Config::get('lada-cache.active', true);
+        $this->cacheActive = (bool) Config::get('model-cache.active', true);
         $this->scope = CacheScope::fromConfig();
-        $this->includeTables = ConfigValue::strings('lada-cache.include_tables');
-        $this->excludeTables = ConfigValue::strings('lada-cache.exclude_tables');
+        $this->includeTables = ConfigValue::strings('model-cache.include_tables');
+        $this->excludeTables = ConfigValue::strings('model-cache.exclude_tables');
     }
 
     public function shouldCache(): bool

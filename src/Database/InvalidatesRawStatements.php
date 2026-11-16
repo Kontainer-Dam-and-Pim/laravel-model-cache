@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Database;
+namespace Kontainer\ModelCache\Database;
 
 use Closure;
+use Kontainer\ModelCache\Services;
+use Kontainer\ModelCache\Support\RawStatementClassifier;
+use Kontainer\ModelCache\Support\Sql\Dialects;
+use Kontainer\ModelCache\Support\TransactionBoundary;
 use PDO;
-use Spiritix\LadaCache\Services;
-use Spiritix\LadaCache\Support\RawStatementClassifier;
-use Spiritix\LadaCache\Support\Sql\Dialects;
-use Spiritix\LadaCache\Support\TransactionBoundary;
 use WeakReference;
 
 trait InvalidatesRawStatements
@@ -58,7 +58,7 @@ trait InvalidatesRawStatements
     {
         $result = parent::run($query, $bindings, $callback);
 
-        if (! (bool) config('lada-cache.active', true)) {
+        if (! (bool) config('model-cache.active', true)) {
             return $result;
         }
 

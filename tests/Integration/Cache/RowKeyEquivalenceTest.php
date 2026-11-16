@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Support\RowKeys;
-use Spiritix\LadaCache\Tagger;
-use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
-use Spiritix\LadaCache\Tests\Database\Models\License;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Reflector;
+use Kontainer\ModelCache\Support\RowKeys;
+use Kontainer\ModelCache\Tagger;
+use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
+use Kontainer\ModelCache\Tests\Database\Models\License;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class RowKeyEquivalenceTest extends TestCase
 {

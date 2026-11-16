@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit;
+namespace Kontainer\ModelCache\Tests\Unit;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Tagger;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Reflector;
+use Kontainer\ModelCache\Tagger;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class TaggerTest extends TestCase
 {
@@ -18,7 +18,7 @@ class TaggerTest extends TestCase
 
     public function testSelectWithoutRowsWhenConsiderRowsFalseProducesDatabaseTableTags(): void
     {
-        config(['lada-cache.consider_rows' => false]);
+        config(['model-cache.consider_rows' => false]);
 
         $b = DB::table('cars');
         $tags = (new Tagger(new Reflector($b)))->getTags();
@@ -28,7 +28,7 @@ class TaggerTest extends TestCase
 
     public function testWithoutRowsTagsSeparateDatabaseAndTableNames(): void
     {
-        config(['lada-cache.consider_rows' => false]);
+        config(['model-cache.consider_rows' => false]);
 
         $tags = (new Tagger(new Reflector(DB::table('ab'))))->getTags();
 
@@ -38,7 +38,7 @@ class TaggerTest extends TestCase
 
     public function testSelectWithoutRowsWhenConsiderRowsTrueProducesUnspecificTableTag(): void
     {
-        config(['lada-cache.consider_rows' => true]);
+        config(['model-cache.consider_rows' => true]);
 
         $b = DB::table('cars');
         $tags = (new Tagger(new Reflector($b)))->getTags();
@@ -49,7 +49,7 @@ class TaggerTest extends TestCase
 
     public function testSelectWithRowIdsProducesSpecificTableAndRowTags(): void
     {
-        config(['lada-cache.consider_rows' => true]);
+        config(['model-cache.consider_rows' => true]);
 
         $b = DB::table('cars')->whereIn('id', [1, 2]);
         $tags = (new Tagger(new Reflector($b)))->getTags();
@@ -61,7 +61,7 @@ class TaggerTest extends TestCase
 
     public function testUpdateWithoutRowsProducesBothTableTags(): void
     {
-        config(['lada-cache.consider_rows' => true]);
+        config(['model-cache.consider_rows' => true]);
 
         $b = DB::table('cars');
         $r = new Reflector($b, Reflector::QUERY_TYPE_UPDATE, ['name' => 'x']);
@@ -73,7 +73,7 @@ class TaggerTest extends TestCase
 
     public function testUpdateWithSpecificRowsProducesUnspecificAndRowTags(): void
     {
-        config(['lada-cache.consider_rows' => true]);
+        config(['model-cache.consider_rows' => true]);
 
         $b = DB::table('cars')->whereIn('id', [5, 10]);
         $r = new Reflector($b, Reflector::QUERY_TYPE_UPDATE, ['name' => 'updated']);
@@ -89,7 +89,7 @@ class TaggerTest extends TestCase
 
     public function testInsertProducesUnspecificTableTag(): void
     {
-        config(['lada-cache.consider_rows' => true]);
+        config(['model-cache.consider_rows' => true]);
 
         $b = DB::table('cars');
         $r = new Reflector($b, Reflector::QUERY_TYPE_INSERT, ['name' => 'x']);
@@ -100,7 +100,7 @@ class TaggerTest extends TestCase
 
     public function testDeleteWithoutRowsProducesBothTableTags(): void
     {
-        config(['lada-cache.consider_rows' => true]);
+        config(['model-cache.consider_rows' => true]);
 
         $b = DB::table('cars');
         $r = new Reflector($b, Reflector::QUERY_TYPE_DELETE);
@@ -112,7 +112,7 @@ class TaggerTest extends TestCase
 
     public function testTruncateProducesSpecificAndUnspecificTableTags(): void
     {
-        config(['lada-cache.consider_rows' => true]);
+        config(['model-cache.consider_rows' => true]);
 
         $b = DB::table('cars');
         $r = new Reflector($b, Reflector::QUERY_TYPE_TRUNCATE);
@@ -124,7 +124,7 @@ class TaggerTest extends TestCase
 
     public function testAliasNormalizationStripsAsAliasInTableNames(): void
     {
-        config(['lada-cache.consider_rows' => false]);
+        config(['model-cache.consider_rows' => false]);
 
         $b = DB::table('engines as e');
         $tags = (new Tagger(new Reflector($b)))->getTags();
@@ -135,7 +135,7 @@ class TaggerTest extends TestCase
 
     public function testTagsWithExpressionFromAliasAndWhereRows(): void
     {
-        config(['lada-cache.consider_rows' => true]);
+        config(['model-cache.consider_rows' => true]);
 
         $sub = DB::table('materials')->select('id');
         $b = DB::query()

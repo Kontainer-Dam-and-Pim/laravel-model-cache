@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis as RedisFacade;
+use Kontainer\ModelCache\Cache;
+use Kontainer\ModelCache\CacheHit;
+use Kontainer\ModelCache\CacheMiss;
+use Kontainer\ModelCache\CacheUnavailableException;
+use Kontainer\ModelCache\Encoder;
+use Kontainer\ModelCache\ExpirationPolicy;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Support\RedisAvailability;
+use Kontainer\ModelCache\Tests\TestCase;
 use PDO;
-use Spiritix\LadaCache\Cache;
-use Spiritix\LadaCache\CacheHit;
-use Spiritix\LadaCache\CacheMiss;
-use Spiritix\LadaCache\CacheUnavailableException;
-use Spiritix\LadaCache\Encoder;
-use Spiritix\LadaCache\ExpirationPolicy;
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Support\RedisAvailability;
-use Spiritix\LadaCache\Tests\TestCase;
 use Throwable;
 
 final class RuntimeModesTest extends TestCase
@@ -41,7 +41,7 @@ final class RuntimeModesTest extends TestCase
         $cache = new Cache(new Redis, new Encoder, new ExpirationPolicy(0));
         $cache->store($this->miss($cache), [['id' => 1]]);
 
-        RedisFacade::connection((string) config('lada-cache.redis_connection'))->command('script', ['flush']);
+        RedisFacade::connection((string) config('model-cache.redis_connection'))->command('script', ['flush']);
 
         $this->assertInstanceOf(CacheHit::class, $cache->lookup('k', ['t'], []));
     }
@@ -90,7 +90,7 @@ final class RuntimeModesTest extends TestCase
         $queries = array_column(DB::getQueryLog(), 'query');
         $carQueries = array_values(array_filter($queries, static fn (string $query): bool => str_contains($query, 'cars')));
         $this->assertCount(1, $carQueries);
-        $this->assertStringContainsString('1 as lada_exists', $carQueries[0]);
+        $this->assertStringContainsString('1 as model_cache_exists', $carQueries[0]);
     }
 
     public function testUpdateOrInsertWithCallbackValuesInvalidates(): void
@@ -134,7 +134,7 @@ final class RuntimeModesTest extends TestCase
 
     private function unreachableRedis(?RedisAvailability $availability = null): Redis
     {
-        config(['lada-cache.redis_connection' => 'unreachable']);
+        config(['model-cache.redis_connection' => 'unreachable']);
 
         return new Redis(null, $availability);
     }

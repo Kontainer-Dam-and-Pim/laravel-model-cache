@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Database\Events\MigrationEnded;
 use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class MigrationsEndedTest extends TestCase
 {
@@ -18,7 +18,7 @@ final class MigrationsEndedTest extends TestCase
         $this->seedCachedName('pre-migration');
         $generationBefore = $this->currentGenerationId();
 
-        $this->renameOutsideLada('post-migration');
+        $this->renameOutsideTheCache('post-migration');
         event(new MigrationEnded(new class extends Migration {}, 'up'));
 
         $this->assertNotSame($generationBefore, $this->currentGenerationId());
@@ -52,7 +52,7 @@ final class MigrationsEndedTest extends TestCase
         $this->assertSame($name, DB::table('cars')->where('id', 1)->value('name'));
     }
 
-    private function renameOutsideLada(string $name): void
+    private function renameOutsideTheCache(string $name): void
     {
         DB::connection()->getPdo()->prepare('update cars set name = ? where id = 1')->execute([$name]);
     }

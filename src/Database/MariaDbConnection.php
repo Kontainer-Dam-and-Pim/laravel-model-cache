@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Database;
+namespace Kontainer\ModelCache\Database;
 
 use Illuminate\Database\MySqlConnection as BaseMySqlConnection;
-use Spiritix\LadaCache\Services;
+use Kontainer\ModelCache\Services;
 
 /**
- * Lada Cache-aware MariaDB connection.
+ * Model Cache-aware MariaDB connection.
  *
  * MariaDB is compatible with Laravel's MySQL driver, so we extend
- * Illuminate's MySqlConnection while providing Lada's query builder.
+ * Illuminate's MySqlConnection while providing the caching query builder.
  */
 final class MariaDbConnection extends BaseMySqlConnection implements RunsBuilderStatements
 {
@@ -20,7 +20,7 @@ final class MariaDbConnection extends BaseMySqlConnection implements RunsBuilder
     /** {@inheritDoc} */
     public function query()
     {
-        if (! (bool) config('lada-cache.active', true)) {
+        if (! (bool) config('model-cache.active', true)) {
             return parent::query();
         }
 

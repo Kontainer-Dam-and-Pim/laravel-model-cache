@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit\Support;
+namespace Kontainer\ModelCache\Tests\Unit\Support;
 
+use Kontainer\ModelCache\Support\Sql\Dialects;
+use Kontainer\ModelCache\Support\Sql\ParserException;
+use Kontainer\ModelCache\Support\Sql\WriteTargets;
+use Kontainer\ModelCache\Support\SqlTableScanner;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Spiritix\LadaCache\Support\Sql\Dialects;
-use Spiritix\LadaCache\Support\Sql\ParserException;
-use Spiritix\LadaCache\Support\Sql\WriteTargets;
-use Spiritix\LadaCache\Support\SqlTableScanner;
 
 final class SqlTableScannerTest extends TestCase
 {

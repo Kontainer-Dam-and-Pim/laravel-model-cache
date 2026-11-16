@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Database;
+namespace Kontainer\ModelCache\Tests\Integration\Database;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Database\QueryBuilder as LadaQueryBuilder;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Database\QueryBuilder as CachingQueryBuilder;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class ConnectionWiringTest extends TestCase
 {
-    public function testDbTableReturnsLadaQueryBuilder(): void
+    public function testDbTableReturnsCachingQueryBuilder(): void
     {
         $builder = DB::table('cars');
-        $this->assertInstanceOf(LadaQueryBuilder::class, $builder);
+        $this->assertInstanceOf(CachingQueryBuilder::class, $builder);
     }
 
     public function testQueryGrammarAndProcessorAreUsable(): void

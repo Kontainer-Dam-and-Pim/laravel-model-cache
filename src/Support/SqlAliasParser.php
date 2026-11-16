@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 /**
  * Splits a query builder's `table as alias` the way Laravel's grammar does
- * (`Grammar::wrapAliasedTable()`), so Lada reads the same table and alias the database is sent.
+ * (`Grammar::wrapAliasedTable()`), so the cache reads the same table and alias the database is sent.
  */
 final class SqlAliasParser
 {

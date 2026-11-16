@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit;
+namespace Kontainer\ModelCache\Tests\Unit;
 
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Spiritix\LadaCache\Cache;
-use Spiritix\LadaCache\Encoder;
-use Spiritix\LadaCache\ExpirationPolicy;
-use Spiritix\LadaCache\QueryHandler;
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Support\Write;
-use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Cache;
+use Kontainer\ModelCache\Encoder;
+use Kontainer\ModelCache\ExpirationPolicy;
+use Kontainer\ModelCache\QueryHandler;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Support\Write;
+use Kontainer\ModelCache\Tests\Concerns\RecordsRedisCommands;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class QueryHandlerTest extends TestCase
 {
@@ -38,7 +38,7 @@ class QueryHandlerTest extends TestCase
     {
         parent::setUp();
 
-        config(['lada-cache.prefix' => 'p:']);
+        config(['model-cache.prefix' => 'p:']);
 
         $this->cache = new Cache(new Redis, new Encoder, new ExpirationPolicy(0));
     }
@@ -194,7 +194,7 @@ class QueryHandlerTest extends TestCase
 
     private function handlerWithUnreachableRedis(): QueryHandler
     {
-        config(['lada-cache.redis_connection' => 'unreachable']);
+        config(['model-cache.redis_connection' => 'unreachable']);
 
         return new QueryHandler(new Cache(new Redis, new Encoder, new ExpirationPolicy(0)));
     }

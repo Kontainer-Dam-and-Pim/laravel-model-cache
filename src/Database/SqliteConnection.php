@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Database;
+namespace Kontainer\ModelCache\Database;
 
 use Illuminate\Database\SQLiteConnection as BaseSqliteConnection;
-use Spiritix\LadaCache\Services;
+use Kontainer\ModelCache\Services;
 
 /**
- * Lada Cache-aware SQLite connection.
+ * Model Cache-aware SQLite connection.
  */
 final class SqliteConnection extends BaseSqliteConnection implements RunsBuilderStatements
 {
@@ -17,7 +17,7 @@ final class SqliteConnection extends BaseSqliteConnection implements RunsBuilder
     /** {@inheritDoc} */
     public function query()
     {
-        if (! (bool) config('lada-cache.active', true)) {
+        if (! (bool) config('model-cache.active', true)) {
             return parent::query();
         }
 

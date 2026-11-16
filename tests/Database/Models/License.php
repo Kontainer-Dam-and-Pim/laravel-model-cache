@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Database\Models;
+namespace Kontainer\ModelCache\Tests\Database\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Spiritix\LadaCache\Database\LadaCacheTrait;
+use Kontainer\ModelCache\Database\ModelCacheTrait;
 
 class License extends Model
 {
-    use LadaCacheTrait;
+    use ModelCacheTrait;
 
     public $incrementing = false;
 

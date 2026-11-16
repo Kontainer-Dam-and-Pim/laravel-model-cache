@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit\Debug;
+namespace Kontainer\ModelCache\Tests\Unit\Debug;
 
+use Kontainer\ModelCache\Debug\CacheCollector;
 use PHPUnit\Framework\TestCase;
-use Spiritix\LadaCache\Debug\CacheCollector;
 
 class CacheCollectorTest extends TestCase
 {
@@ -26,8 +26,8 @@ class CacheCollectorTest extends TestCase
 
         $this->assertIsArray($data);
         $this->assertArrayHasKey('measures', $data);
-        $this->assertArrayHasKey('lada-measures', $data);
-        $this->assertGreaterThanOrEqual(1, $data['lada-measures']);
+        $this->assertArrayHasKey('model-cache-measures', $data);
+        $this->assertGreaterThanOrEqual(1, $data['model-cache-measures']);
         $this->assertNotEmpty($data['measures']);
 
         $first = $data['measures'][0] ?? null;
@@ -57,18 +57,18 @@ class CacheCollectorTest extends TestCase
     {
         $collector = new CacheCollector;
 
-        $this->assertSame('lada', $collector->getName());
+        $this->assertSame('model-cache', $collector->getName());
 
         $widgets = $collector->getWidgets();
         $this->assertIsArray($widgets);
-        $this->assertArrayHasKey('Lada Cache', $widgets);
-        $this->assertArrayHasKey('Lada Cache:badge', $widgets);
+        $this->assertArrayHasKey('Model Cache', $widgets);
+        $this->assertArrayHasKey('Model Cache:badge', $widgets);
 
-        $timeline = $widgets['Lada Cache'];
+        $timeline = $widgets['Model Cache'];
         $this->assertSame('PhpDebugBar.Widgets.TimelineWidget', $timeline['widget']);
-        $this->assertSame('lada', $timeline['map']);
+        $this->assertSame('model-cache', $timeline['map']);
 
-        $badge = $widgets['Lada Cache:badge'];
-        $this->assertSame('lada.lada-measures', $badge['map']);
+        $badge = $widgets['Model Cache:badge'];
+        $this->assertSame('model-cache.model-cache-measures', $badge['map']);
     }
 }

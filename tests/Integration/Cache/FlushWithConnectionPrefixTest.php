@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\Redis as RedisFacade;
-use Spiritix\LadaCache\Cache;
-use Spiritix\LadaCache\CacheHit;
-use Spiritix\LadaCache\CacheMiss;
-use Spiritix\LadaCache\Encoder;
-use Spiritix\LadaCache\ExpirationPolicy;
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Support\Invalidation;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Cache;
+use Kontainer\ModelCache\CacheHit;
+use Kontainer\ModelCache\CacheMiss;
+use Kontainer\ModelCache\Encoder;
+use Kontainer\ModelCache\ExpirationPolicy;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Support\Invalidation;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class FlushWithConnectionPrefixTest extends TestCase
 {
@@ -21,7 +21,7 @@ class FlushWithConnectionPrefixTest extends TestCase
         parent::getEnvironmentSetUp($app);
 
         $app['config']->set('database.redis.options.prefix', 'app_');
-        $app['config']->set('lada-cache.prefix', 'lada:');
+        $app['config']->set('model-cache.prefix', 'model-cache:');
     }
 
     public function testEntriesRoundTripUnderConnectionPrefix(): void
@@ -35,7 +35,7 @@ class FlushWithConnectionPrefixTest extends TestCase
         $hit = $cache->lookup('k1', ['t1'], []);
         $this->assertInstanceOf(CacheHit::class, $hit);
         $this->assertSame(['row'], $hit->rows);
-        $this->assertContains('app_lada:generation', RedisFacade::connection('cache')->keys('lada:*'));
+        $this->assertContains('app_model-cache:generation', RedisFacade::connection('cache')->keys('model-cache:*'));
     }
 
     public function testInvalidationHonoursConnectionPrefix(): void
@@ -53,13 +53,13 @@ class FlushWithConnectionPrefixTest extends TestCase
         $cache = $this->freshCache();
         $this->seedEntry($cache, 'k1', ['t1'], ['1']);
         $this->seedEntry($cache, 'k2', ['t2'], ['2']);
-        $this->assertGreaterThanOrEqual(5, count(RedisFacade::connection('cache')->keys('lada:*')));
+        $this->assertGreaterThanOrEqual(5, count(RedisFacade::connection('cache')->keys('model-cache:*')));
 
         $cache->flush();
 
-        $remaining = RedisFacade::connection('cache')->keys('lada:*');
+        $remaining = RedisFacade::connection('cache')->keys('model-cache:*');
         sort($remaining);
-        $this->assertSame(['app_lada:generation', 'app_lada:server'], $remaining);
+        $this->assertSame(['app_model-cache:generation', 'app_model-cache:server'], $remaining);
     }
 
     private function freshCache(): Cache

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
-use Spiritix\LadaCache\Support\AssignedRows;
-use Spiritix\LadaCache\Support\CascadeRead;
-use Spiritix\LadaCache\Support\ColumnKeys;
-use Spiritix\LadaCache\Support\RowKeys;
-use Spiritix\LadaCache\Support\TableName;
+use Kontainer\ModelCache\Support\AssignedRows;
+use Kontainer\ModelCache\Support\CascadeRead;
+use Kontainer\ModelCache\Support\ColumnKeys;
+use Kontainer\ModelCache\Support\RowKeys;
+use Kontainer\ModelCache\Support\TableName;
 
 /**
  * Generates cache tags for queries based on database, tables, and targeted rows.
@@ -36,7 +36,7 @@ final readonly class Tagger
         private Reflector $reflector,
         private AssignedRows $assignedRows = new AssignedRows,
     ) {
-        $this->considerRows = (bool) config('lada-cache.consider_rows', true);
+        $this->considerRows = (bool) config('model-cache.consider_rows', true);
     }
 
     /**

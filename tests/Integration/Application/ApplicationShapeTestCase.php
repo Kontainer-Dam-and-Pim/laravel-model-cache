@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Application;
+namespace Kontainer\ModelCache\Tests\Integration\Application;
 
 use Closure;
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\TestCase;
 
 /**
  * Query shapes taken from a production application, each asserting that a cached read is
@@ -64,12 +64,12 @@ abstract class ApplicationShapeTestCase extends TestCase
      */
     protected function uncached(Closure $read): mixed
     {
-        config(['lada-cache.active' => false]);
+        config(['model-cache.active' => false]);
 
         try {
             return $read();
         } finally {
-            config(['lada-cache.active' => true]);
+            config(['model-cache.active' => true]);
         }
     }
 

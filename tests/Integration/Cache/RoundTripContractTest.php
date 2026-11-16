@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Closure;
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
-use Spiritix\LadaCache\Tests\Fuzz\Support\Workload;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\Concerns\RecordsRedisCommands;
+use Kontainer\ModelCache\Tests\Fuzz\Support\Workload;
+use Kontainer\ModelCache\Tests\TestCase;
 
 /**
  * The cost contract for every read shape the fuzzer knows: repeating a read never reaches the

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support\Sql;
+namespace Kontainer\ModelCache\Support\Sql;
 
 use Illuminate\Database\Connection;
 use Illuminate\Database\ConnectionInterface;

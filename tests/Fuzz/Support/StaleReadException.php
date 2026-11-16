@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Fuzz\Support;
+namespace Kontainer\ModelCache\Tests\Fuzz\Support;
 
 use PHPUnit\Framework\AssertionFailedError;
 

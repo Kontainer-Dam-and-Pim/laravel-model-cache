@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class OctaneWarmingTest extends TestCase
 {
@@ -15,8 +15,8 @@ final class OctaneWarmingTest extends TestCase
         $app['config']->set('octane.warm', ['view']);
     }
 
-    public function testLadaServicesOutliveRequestsUnderOctane(): void
+    public function testCacheServicesOutliveRequestsUnderOctane(): void
     {
-        $this->assertSame(['view', 'lada.redis', 'lada.metrics', 'lada.cache', 'lada.handler'], config('octane.warm'));
+        $this->assertSame(['view', 'model-cache.redis', 'model-cache.metrics', 'model-cache.cache', 'model-cache.handler'], config('octane.warm'));
     }
 }

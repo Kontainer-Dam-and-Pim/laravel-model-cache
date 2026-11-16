@@ -1,4 +1,4 @@
-Lada Cache
+Laravel Model Cache
 
 src/Support/Sql/ contains code ported from Apache DataFusion sqlparser-rs
 (https://github.com/apache/datafusion-sqlparser-rs),

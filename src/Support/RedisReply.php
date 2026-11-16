@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Support;
+namespace Kontainer\ModelCache\Support;
 
 use UnexpectedValueException;
 
@@ -13,7 +13,7 @@ final class RedisReply
         return match (true) {
             is_string($value) => $value,
             is_int($value) => (string) $value,
-            default => throw new UnexpectedValueException(sprintf('Malformed Lada Cache %s: expected a string, got %s', $context, get_debug_type($value))),
+            default => throw new UnexpectedValueException(sprintf('Malformed Model Cache %s: expected a string, got %s', $context, get_debug_type($value))),
         };
     }
 
@@ -25,6 +25,6 @@ final class RedisReply
             default => false,
         };
 
-        return $parsed !== false ? $parsed : throw new UnexpectedValueException(sprintf('Malformed Lada Cache %s: expected an integer, got %s', $context, get_debug_type($value)));
+        return $parsed !== false ? $parsed : throw new UnexpectedValueException(sprintf('Malformed Model Cache %s: expected an integer, got %s', $context, get_debug_type($value)));
     }
 }

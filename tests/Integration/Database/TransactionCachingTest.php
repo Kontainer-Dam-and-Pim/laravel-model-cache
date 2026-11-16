@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Database;
+namespace Kontainer\ModelCache\Tests\Integration\Database;
 
 use Closure;
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class TransactionCachingTest extends TestCase
 {

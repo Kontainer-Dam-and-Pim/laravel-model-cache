@@ -86,7 +86,7 @@ jobs:
       DB_HOST: 127.0.0.1
       REDIS_HOST: 127.0.0.1
       REDIS_CLIENT: ${{ matrix.redis-client }}
-      LADA_FUZZ_ITERATIONS: ${{ matrix.suite == 'Fuzz' && '3000' || '' }}
+      MODEL_CACHE_FUZZ_ITERATIONS: ${{ matrix.suite == 'Fuzz' && '3000' || '' }}
 
     steps:
       - name: Checkout repository

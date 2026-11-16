@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\Database\Models\Driver;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\Database\Models\Car;
+use Kontainer\ModelCache\Tests\Database\Models\Driver;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class ModelsScopeTest extends TestCase
 {
@@ -17,7 +17,7 @@ final class ModelsScopeTest extends TestCase
     {
         parent::getEnvironmentSetUp($app);
 
-        $app['config']->set('lada-cache.scope', 'models');
+        $app['config']->set('model-cache.scope', 'models');
     }
 
     public function testReadsFromModelsWithTraitAreCached(): void
@@ -49,8 +49,8 @@ final class ModelsScopeTest extends TestCase
         DB::table('drivers')->insert(['id' => 3, 'name' => 'untraited']);
 
         $executed = $this->countExecutedSelects(function (): void {
-            DriverWithoutLadaCache::query()->where('id', 3)->get();
-            DriverWithoutLadaCache::query()->where('id', 3)->get();
+            DriverWithoutModelCache::query()->where('id', 3)->get();
+            DriverWithoutModelCache::query()->where('id', 3)->get();
         });
 
         $this->assertSame(2, $executed);
@@ -71,7 +71,7 @@ final class ModelsScopeTest extends TestCase
         DB::table('drivers')->insert(['id' => 5, 'name' => 'before']);
         $this->assertSame('before', Driver::query()->find(5)?->name);
 
-        DriverWithoutLadaCache::query()->whereKey(5)->update(['name' => 'after']);
+        DriverWithoutModelCache::query()->whereKey(5)->update(['name' => 'after']);
 
         $this->assertSame('after', Driver::query()->find(5)?->name);
     }
@@ -90,7 +90,7 @@ final class ModelsScopeTest extends TestCase
     }
 }
 
-final class DriverWithoutLadaCache extends Model
+final class DriverWithoutModelCache extends Model
 {
     protected $table = 'drivers';
 

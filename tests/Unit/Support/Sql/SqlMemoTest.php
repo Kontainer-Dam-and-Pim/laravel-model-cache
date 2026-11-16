@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Unit\Support\Sql;
+namespace Kontainer\ModelCache\Tests\Unit\Support\Sql;
 
+use Kontainer\ModelCache\Support\Sql\MySqlDialect;
+use Kontainer\ModelCache\Support\Sql\PostgreSqlDialect;
+use Kontainer\ModelCache\Support\Sql\SqlMemo;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
-use Spiritix\LadaCache\Support\Sql\MySqlDialect;
-use Spiritix\LadaCache\Support\Sql\PostgreSqlDialect;
-use Spiritix\LadaCache\Support\Sql\SqlMemo;
 
 final class SqlMemoTest extends TestCase
 {

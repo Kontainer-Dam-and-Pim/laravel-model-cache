@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Tagger;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Reflector;
+use Kontainer\ModelCache\Tagger;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class TagsAndKeysTest extends TestCase
 {
@@ -27,7 +27,7 @@ class TagsAndKeysTest extends TestCase
         DB::table('cars')->insert(['id' => 1717, 'name' => 'T', 'engine_id' => null, 'driver_id' => null]);
 
         // Consider rows
-        config(['lada-cache.consider_rows' => true]);
+        config(['model-cache.consider_rows' => true]);
         $builder = DB::table('cars')->where('id', 1717);
         $reflector = new Reflector($builder);
         $dbName = $reflector->getDatabase();

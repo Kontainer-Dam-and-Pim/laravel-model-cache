@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Integration\Cache;
+namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Metrics;
-use Spiritix\LadaCache\Services;
-use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Metrics;
+use Kontainer\ModelCache\Services;
+use Kontainer\ModelCache\Tests\Concerns\RecordsRedisCommands;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class MetricsTest extends TestCase
 {
@@ -19,7 +19,7 @@ final class MetricsTest extends TestCase
     {
         parent::getEnvironmentSetUp($app);
 
-        $app['config']->set('lada-cache.metrics', true);
+        $app['config']->set('model-cache.metrics', true);
     }
 
     protected function setUp(): void
@@ -64,7 +64,7 @@ final class MetricsTest extends TestCase
     {
         DB::table('owners')->get();
 
-        Artisan::call('lada-cache:flush');
+        Artisan::call('model-cache:flush');
         DB::statement('create table metrics_probe (id integer)');
         Services::metrics()->flush(Services::redis());
 
@@ -131,9 +131,9 @@ final class MetricsTest extends TestCase
         DB::table('owners')->get();
         DB::table('owners')->get();
         DB::table('owners')->where('id', 1)->delete();
-        Artisan::call('lada-cache:flush');
+        Artisan::call('model-cache:flush');
 
-        Artisan::call('lada-cache:stats', ['--json' => true, '--table' => 'owners']);
+        Artisan::call('model-cache:stats', ['--json' => true, '--table' => 'owners']);
         $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
 
         $this->assertSame(['owners'], array_keys($report['tables']));
@@ -142,7 +142,7 @@ final class MetricsTest extends TestCase
             $report['tables']['owners'],
         );
         $this->assertSame(['flush' => 1], $report['retires']);
-        $this->artisan('lada-cache:stats', ['--hours' => '2'])->expectsOutputToContain('owners')->expectsOutputToContain('Retires: flush x1')->assertExitCode(0);
+        $this->artisan('model-cache:stats', ['--hours' => '2'])->expectsOutputToContain('owners')->expectsOutputToContain('Retires: flush x1')->assertExitCode(0);
     }
 
     /**

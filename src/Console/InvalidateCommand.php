@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Console;
+namespace Kontainer\ModelCache\Console;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Database\QueryBuilder;
-use Spiritix\LadaCache\Services;
-use Spiritix\LadaCache\Support\RedisCooldown;
-use Spiritix\LadaCache\Support\Write;
+use Kontainer\ModelCache\Database\QueryBuilder;
+use Kontainer\ModelCache\Services;
+use Kontainer\ModelCache\Support\RedisCooldown;
+use Kontainer\ModelCache\Support\Write;
 use Throwable;
 
 /**
@@ -18,16 +18,16 @@ use Throwable;
  */
 final class InvalidateCommand extends Command
 {
-    protected $signature = 'lada-cache:invalidate
+    protected $signature = 'model-cache:invalidate
         {tables* : Tables whose cached reads to invalidate}
         {--connection= : Database connection of the tables, the default connection when omitted}';
 
-    protected $description = 'Invalidate the Lada Cache entries of specific tables.';
+    protected $description = 'Invalidate the Model Cache entries of specific tables.';
 
     public function handle(): int
     {
-        if (! (bool) config('lada-cache.active', true)) {
-            $this->error('Lada Cache is disabled. Nothing was invalidated.');
+        if (! (bool) config('model-cache.active', true)) {
+            $this->error('Model Cache is disabled. Nothing was invalidated.');
 
             return self::FAILURE;
         }
@@ -42,7 +42,7 @@ final class InvalidateCommand extends Command
         }
 
         if (! $connection->query() instanceof QueryBuilder) {
-            $this->error("Connection {$connection->getName()} does not use Lada Cache.");
+            $this->error("Connection {$connection->getName()} does not use Model Cache.");
 
             return self::FAILURE;
         }

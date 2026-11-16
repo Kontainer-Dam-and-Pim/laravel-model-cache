@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache;
+namespace Kontainer\ModelCache;
 
-use Spiritix\LadaCache\Support\CascadeRead;
-use Spiritix\LadaCache\Support\DependentTables;
-use Spiritix\LadaCache\Support\Invalidation;
-use Spiritix\LadaCache\Support\Metric;
-use Spiritix\LadaCache\Support\RedisCooldown;
-use Spiritix\LadaCache\Support\RedisReply;
-use Spiritix\LadaCache\Support\RetireReason;
-use Spiritix\LadaCache\Support\Write;
+use Kontainer\ModelCache\Support\CascadeRead;
+use Kontainer\ModelCache\Support\DependentTables;
+use Kontainer\ModelCache\Support\Invalidation;
+use Kontainer\ModelCache\Support\Metric;
+use Kontainer\ModelCache\Support\RedisCooldown;
+use Kontainer\ModelCache\Support\RedisReply;
+use Kontainer\ModelCache\Support\RetireReason;
+use Kontainer\ModelCache\Support\Write;
 use Throwable;
 use UnexpectedValueException;
 
 /**
- * Persistence layer for Lada Cache backed by Redis.
+ * Persistence layer for Model Cache backed by Redis.
  *
  * Architectural notes:
  * - Every operation is a single atomic Lua script, see `LuaScripts` for the key layout.
@@ -91,7 +91,7 @@ final class Cache
         ]);
 
         if (! is_array($reply) || ! isset($reply[0], $reply[1])) {
-            throw new UnexpectedValueException('Malformed Lada Cache lookup reply for key '.$key);
+            throw new UnexpectedValueException('Malformed Model Cache lookup reply for key '.$key);
         }
 
         if (isset($reply[2])) {
@@ -187,7 +187,7 @@ final class Cache
         $reply = $this->redis->evaluate($this->metrics->script(LuaScripts::INVALIDATE), [...$arguments, ...$this->metrics->scriptArguments()], $cooldown);
 
         if (! is_array($reply) || ! isset($reply[0])) {
-            throw new UnexpectedValueException('Malformed Lada Cache invalidation reply');
+            throw new UnexpectedValueException('Malformed Model Cache invalidation reply');
         }
 
         if ($reply[0] === 0 || $reply[0] === '0') {
@@ -197,7 +197,7 @@ final class Cache
         return [
             'generation' => new Generation(RedisReply::string($reply[0], 'invalidation generation')),
             'databasesWithUnknownDependents' => array_values(array_map(
-                static fn (mixed $group): string => $databases[RedisReply::integer($group, 'invalidation dependents group') - 1] ?? throw new UnexpectedValueException('Unknown dependents group '.json_encode($group).' in Lada Cache invalidation reply'),
+                static fn (mixed $group): string => $databases[RedisReply::integer($group, 'invalidation dependents group') - 1] ?? throw new UnexpectedValueException('Unknown dependents group '.json_encode($group).' in Model Cache invalidation reply'),
                 array_slice($reply, 1),
             )),
         ];
@@ -244,7 +244,7 @@ final class Cache
      */
     private function dependentsName(string $database): string
     {
-        $configured = config('lada-cache.dependent_tables', []);
+        $configured = config('model-cache.dependent_tables', []);
 
         if ($this->dependentsConfiguration === null || $this->dependentsConfiguration['configured'] !== $configured) {
             $this->dependentsConfiguration = [
@@ -309,7 +309,7 @@ final class Cache
             $reply = $this->redis->evaluate(LuaScripts::PRUNE_BATCH, [$cursor, self::PRUNE_BATCH_SIZE]);
 
             if (! is_array($reply) || ! isset($reply[0], $reply[1])) {
-                throw new UnexpectedValueException('Malformed Lada Cache prune reply at cursor '.$cursor);
+                throw new UnexpectedValueException('Malformed Model Cache prune reply at cursor '.$cursor);
             }
 
             $cursor = RedisReply::string($reply[0], 'prune cursor');

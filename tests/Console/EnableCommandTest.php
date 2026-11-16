@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Console;
+namespace Kontainer\ModelCache\Tests\Console;
 
-use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Tests\TestCase;
 
 class EnableCommandTest extends TestCase
 {
     public function testEnableCommandPrintsMessagesAndSucceeds(): void
     {
-        $this->artisan('lada-cache:enable')
-            ->expectsOutput('Lada Cache enabled.')
+        $this->artisan('model-cache:enable')
+            ->expectsOutput('Model Cache enabled.')
             ->assertExitCode(0);
     }
 
@@ -21,7 +21,7 @@ class EnableCommandTest extends TestCase
         $redis = new Redis;
         $redis->set($redis->prefix('generation'), 'cached-before-disabling');
 
-        $this->artisan('lada-cache:enable')->assertExitCode(0);
+        $this->artisan('model-cache:enable')->assertExitCode(0);
 
         $this->assertNotSame('cached-before-disabling', $redis->get($redis->prefix('generation')));
     }

@@ -1,5 +1,5 @@
 {
-  description = "Lada Cache, a Redis-backed query cache for Laravel";
+  description = "Laravel Model Cache, a Redis-backed query cache for Laravel";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";

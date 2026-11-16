@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Spiritix\LadaCache\Tests\Fuzz;
+namespace Kontainer\ModelCache\Tests\Fuzz;
 
-use Spiritix\LadaCache\Tests\Fuzz\Support\Workload;
-use Spiritix\LadaCache\Tests\TestCase;
+use Kontainer\ModelCache\Tests\Fuzz\Support\Workload;
+use Kontainer\ModelCache\Tests\TestCase;
 
 final class DifferentialFuzzTest extends TestCase
 {
@@ -20,23 +20,23 @@ final class DifferentialFuzzTest extends TestCase
 
     public function testCachedReadsMatchTheDatabaseWithoutRowLevelTags(): void
     {
-        config(['lada-cache.consider_rows' => false]);
+        config(['model-cache.consider_rows' => false]);
 
         $this->runWorkload(intdiv(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS), 2));
     }
 
     public function testCachedReadsMatchTheDatabaseWhenOnlyModelsAreCached(): void
     {
-        config(['lada-cache.scope' => 'models']);
+        config(['model-cache.scope' => 'models']);
 
         $this->runWorkload(intdiv(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS), 2));
     }
 
     public function testCachedReadsMatchTheDatabaseWithoutExpiration(): void
     {
-        config(['lada-cache.expiration_time' => 0]);
-        $this->app->forgetInstance('lada.cache');
-        $this->app->forgetInstance('lada.handler');
+        config(['model-cache.expiration_time' => 0]);
+        $this->app->forgetInstance('model-cache.cache');
+        $this->app->forgetInstance('model-cache.handler');
 
         $this->runWorkload(intdiv(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS), 2));
     }
