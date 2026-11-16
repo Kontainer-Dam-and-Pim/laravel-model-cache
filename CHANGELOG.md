@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## [Unreleased]
+## [1.0.0] - 2026-11-16
 ### Added
 - `model-cache.metrics` (`MODEL_CACHE_METRICS`, off by default) counts hits, misses, stores, invalidations and their cascade reach per table, retires, bypasses and failures by reason, and the statements that run uncached or retire the cache, inside the Redis calls Model Cache already makes; `php artisan model-cache:stats [--hours] [--table] [--json]` reports them. With metrics off the scripts and their arguments are unchanged
 - Added `php artisan model-cache:invalidate <tables>` to invalidate specific tables after changes made outside Laravel, such as imports or manual fixes, without flushing the cache

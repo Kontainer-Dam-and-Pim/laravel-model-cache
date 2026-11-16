@@ -5,6 +5,10 @@
 Automatic Redis query cache for Laravel's query builder and Eloquent, with invalidation that follows writes, transactions, foreign keys, views and triggers.
 
 [![Tests](https://github.com/Kontainer-Dam-and-Pim/laravel-model-cache/actions/workflows/tests.yml/badge.svg)](https://github.com/Kontainer-Dam-and-Pim/laravel-model-cache/actions/workflows/tests.yml)
+[![Latest version](https://img.shields.io/packagist/v/kontainer/laravel-model-cache)](https://packagist.org/packages/kontainer/laravel-model-cache)
+[![PHP version](https://img.shields.io/packagist/dependency-v/kontainer/laravel-model-cache/php)](https://packagist.org/packages/kontainer/laravel-model-cache)
+[![Downloads](https://img.shields.io/packagist/dt/kontainer/laravel-model-cache)](https://packagist.org/packages/kontainer/laravel-model-cache)
+[![License](https://img.shields.io/packagist/l/kontainer/laravel-model-cache)](LICENSE)
 
 - [Requirements](#requirements)
 - [Compatibility](#compatibility)
