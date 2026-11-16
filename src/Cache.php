@@ -71,7 +71,6 @@ final class Cache
             $key,
             self::freshToken(),
             $this->expiration->nextTtl(),
-            $this->redis->ladaPrefix(),
             (int) $this->serverCheckIsDue(),
             count($versionTags),
             ...$versionTags,
@@ -88,7 +87,6 @@ final class Cache
 
         $reply = $this->redis->evaluate($this->metrics->script(LuaScripts::LOOKUP), [
             ...$arguments,
-            ...($this->legacyInvalidation() ? self::canonicalTags(Tagger::legacyDependencies($versionTags)) : []),
             ...$this->metrics->scriptArguments($table),
         ]);
 
@@ -163,8 +161,6 @@ final class Cache
             self::freshToken(),
             $this->expiration->nextTtl(),
             $invalidation->replicaLagSeconds,
-            (int) $this->legacyInvalidation(),
-            $this->redis->ladaPrefix(),
             count($invalidation->tags()),
             ...$invalidation->tags(),
         ];
@@ -240,11 +236,6 @@ final class Cache
         }
 
         return RedisReply::integer($this->redis->evaluate(LuaScripts::STORE_DEPENDENTS, $arguments, $cooldown), 'store dependents reply') === 1;
-    }
-
-    private function legacyInvalidation(): bool
-    {
-        return (bool) config('lada-cache.legacy_invalidation', false);
     }
 
     /**

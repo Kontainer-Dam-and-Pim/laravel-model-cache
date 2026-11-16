@@ -68,14 +68,6 @@ final class LadaCacheServiceProvider extends ServiceProvider
         'sqlsrv' => LadaSqlServerConnection::class,
     ];
 
-    private const array RENAMED_KEYS = [
-        'expiration-time' => 'expiration_time',
-        'consider-rows' => 'consider_rows',
-        'include-tables' => 'include_tables',
-        'exclude-tables' => 'exclude_tables',
-        'enable-debugbar' => 'enable_debugbar',
-    ];
-
     public function boot(): void
     {
         $this->publishes([
@@ -183,7 +175,6 @@ final class LadaCacheServiceProvider extends ServiceProvider
     private function hasValidConfiguration(): bool
     {
         try {
-            self::rejectRenamedKeys();
             CacheScope::fromConfig();
             ConfigValue::strings('lada-cache.include_tables');
             ConfigValue::strings('lada-cache.exclude_tables');
@@ -201,23 +192,6 @@ final class LadaCacheServiceProvider extends ServiceProvider
             config(['lada-cache.active' => false]);
 
             return false;
-        }
-    }
-
-    /**
-     * A configuration published by an earlier version names settings that no longer exist, so
-     * its values would be silently replaced by defaults.
-     */
-    private static function rejectRenamedKeys(): void
-    {
-        $renamed = array_intersect_key(self::RENAMED_KEYS, (array) config('lada-cache', []));
-
-        if ($renamed !== []) {
-            throw new InvalidArgumentException(implode(', ', array_map(
-                static fn (string $old, string $new): string => "lada-cache.{$old} was renamed to lada-cache.{$new}",
-                array_keys($renamed),
-                $renamed,
-            )));
         }
     }
 

@@ -6,7 +6,6 @@
 
 # Composer & vendor
 /vendor/
-/tests/Rollout/legacy/vendor/
 composer.phar
 
 # Build artifacts

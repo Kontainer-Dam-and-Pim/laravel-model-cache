@@ -63,12 +63,10 @@ jobs:
         php: ['8.4']
         database: [sqlite, mysql, pgsql]
         redis-client: [phpredis, predis]
-        suite: [Unit, Integration, Fuzz, Concurrency, Rollout]
+        suite: [Unit, Integration, Fuzz, Concurrency]
         exclude:
           - database: sqlite
             suite: Concurrency
-          - database: sqlite
-            suite: Rollout
         include:
           - php: '8.3'
             database: sqlite
@@ -115,10 +113,6 @@ jobs:
 
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
-
-      - name: Install the 5.x release the Rollout suite runs beside this version
-        if: matrix.suite == 'Rollout'
-        run: composer install --no-interaction --prefer-dist -d tests/Rollout/legacy
 
       - name: Run ${{ matrix.suite }} suite
         run: vendor/bin/phpunit --no-coverage --testsuite ${{ matrix.suite }}

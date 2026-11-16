@@ -28,8 +28,6 @@ use Spiritix\LadaCache\Support\Write;
  *                                       named by database and dependency configuration; `Write::ANY_TABLE_FIELD` is always
  *                                       present and lists `DependentTables::EVERY_TABLE` when the schema could not be read
  * - `<base>stats:<bucket start>`        with metrics, a hash of counters for one time bucket (see `Metrics`)
- * - `<base>legacy:<tag>`                with legacy invalidation, a token listed in the 5.x tag set `<base><tag>`,
- *                                       so a 5.x host invalidating the tag deletes it
  *
  * An entry is valid only while the fingerprint of its tags' current tokens matches the one
  * captured before the query ran, so a result read before a concurrent write is never served.
@@ -179,10 +177,9 @@ final class LuaScripts
         LUA;
 
     /**
-     * ARGV: base, entry hash, fresh token, ttl seconds, Lada prefix, 1 to check the server else 0, tag count, tags...,
+     * ARGV: base, entry hash, fresh token, ttl seconds, 1 to check the server else 0, tag count, tags...,
      *       cascade read count, then per table read: dependents name, cascade tag prefix, cascade
-     *       columns field, pinned column count, then per column: column, `ColumnKeys::arguments()`,
-     *       then legacy tags...
+     *       columns field, pinned column count, then per column: column, `ColumnKeys::arguments()`
      * Returns {generation, fingerprint} on a miss and {generation, fingerprint, payload} on a hit.
      *
      * Asked to check the server, it first retires the generation of another server run (see
@@ -196,21 +193,14 @@ final class LuaScripts
      * when it pins none or values that type cannot key; without a
      * readable dependency map, the `any` tag. A table no row-precise cascade reaches takes none.
      * The tokens of all tags are read with one MGET, in the order the tags are named.
-     *
-     * Legacy tags are only passed with legacy invalidation on (see `Tagger::legacyDependencies()`);
-     * each contributes the token of `<base>legacy:<tag>` to the fingerprint. That key is listed in the tag's 5.x tag set, which a 5.x host invalidating the
-     * tag deletes along with every key it lists, so the fingerprint changes and entries this
-     * version stored before the 5.x write become unreachable. A token whose key is missing or no
-     * longer listed in the set, because the 5.x host deleted the set but not yet its keys, is replaced.
      */
     public const string LOOKUP = self::NO_METRICS.self::LOOKUP_BODY;
 
     private const string LOOKUP_BODY = self::SERVER_CHECK.self::DEPENDENTS_NAMES.self::CASCADE_TAGS.<<<'LUA'
         local base, fresh, ttl = ARGV[1], ARGV[3], tonumber(ARGV[4])
-        local connectionPrefix = string.sub(base, 1, #base - #ARGV[5])
-        local lastVersionTag = 7 + tonumber(ARGV[7])
+        local lastVersionTag = 6 + tonumber(ARGV[6])
         local generationKey = base .. 'generation'
-        if ARGV[6] == '1' then
+        if ARGV[5] == '1' then
             retireIfServerChanged(base)
         end
         local generation = redis.call('GET', generationKey)
@@ -230,7 +220,7 @@ final class LuaScripts
         local function takeToken(tag)
             versionKeys[#versionKeys + 1] = scope .. 'v:' .. tag
         end
-        for i = 8, lastVersionTag do
+        for i = 7, lastVersionTag do
             takeToken(ARGV[i])
         end
         local index = lastVersionTag + 1
@@ -280,18 +270,6 @@ final class LuaScripts
                 tokens[i] = token
             end
         end
-        for i = index, lastArgument do
-            local legacyKey = base .. 'legacy:' .. ARGV[i]
-            local legacySet = base .. ARGV[i]
-            local member = string.sub(legacyKey, #connectionPrefix + 1)
-            local legacyToken = redis.call('GET', legacyKey)
-            if not legacyToken or redis.call('SISMEMBER', legacySet, member) == 0 then
-                legacyToken = fresh
-                setToken(legacyKey, legacyToken)
-                redis.call('SADD', legacySet, member)
-            end
-            tokens[#tokens + 1] = 'legacy:' .. legacyToken
-        end
         local fingerprint = redis.sha1hex(table.concat(tokens, ':'))
         local entry = redis.call('GET', scope .. 'e:' .. ARGV[2])
         if entry and string.sub(entry, 1, 40) == fingerprint then
@@ -335,7 +313,7 @@ final class LuaScripts
         LUA;
 
     /**
-     * ARGV: base, fresh token, ttl seconds, replica lag seconds, 1 with legacy invalidation else 0, Lada prefix, tag count, tags...,
+     * ARGV: base, fresh token, ttl seconds, replica lag seconds, tag count, tags...,
      *       group count, then per group: dependents name, prefix count, prefixes..., field count, dependents fields (see `Write`)...,
      *       cascade tag prefix, keyed field count, then per keyed field: field, fallback field, `ColumnKeys::arguments()`
      * A keyed field lists, besides tables changed table-wide, row-precise foreign key edges as
@@ -352,32 +330,19 @@ final class LuaScripts
      * field, unless the call only follows up the cascades of one already counted (it replaces no
      * tags), and the tables the cascades reached.
      *
-     * With legacy invalidation, every table-level tag replaced also has its 5.x tag set and the
-     * entries it lists deleted, so hosts still running 5.x during a rolling deploy stop serving
-     * what this version invalidated, cascades included; a row-precise cascade deletes the 5.x
-     * entries of the whole child table, which 5.x cannot narrow. 5.x stores each entry in its tag
-     * sets with the Lada prefix but without the client's connection prefix. A generation is
-     * started when there is none, so the cascades of the first write are still looked up.
-     * Returns {0} when
-     * nothing was ever cached or is anymore, else
+     * Returns {0} when nothing was ever cached or is anymore, else
      * {generation, 1-based indexes of the groups whose dependents are not known yet...}.
      */
     public const string INVALIDATE = self::NO_METRICS.self::INVALIDATE_BODY;
 
     private const string INVALIDATE_BODY = self::SERVER_CHECK.self::DEPENDENTS_NAMES.self::CASCADE_TAGS.<<<'LUA'
         local base, fresh, ttl, lag = ARGV[1], ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4])
-        local legacy = ARGV[5] == '1'
-        local connectionPrefix = string.sub(base, 1, #base - #ARGV[6])
-        if retireIfServerChanged(base) and not legacy then
+        if retireIfServerChanged(base) then
             return {0}
         end
         local generation = redis.call('GET', base .. 'generation')
         if not generation then
-            if not legacy then
-                return {0}
-            end
-            generation = fresh
-            redis.call('SET', base .. 'generation', generation)
+            return {0}
         end
         local scope = base .. generation .. ':'
         local function replace(tag)
@@ -390,27 +355,11 @@ final class LuaScripts
                 redis.call('SET', scope .. 'w:' .. tag, '1', 'EX', lag)
             end
         end
-        local function purgeLegacy(tag)
-            local tagKey = base .. tag
-            if not legacy or redis.call('TYPE', tagKey)['ok'] ~= 'set' then
-                return
-            end
-            local entries = redis.call('SMEMBERS', tagKey)
-            for first = 1, #entries, 1000 do
-                local keys = {}
-                for i = first, math.min(first + 999, #entries) do
-                    keys[#keys + 1] = connectionPrefix .. entries[i]
-                end
-                redis.call('UNLINK', unpack(keys))
-            end
-            redis.call('UNLINK', tagKey)
-        end
-        local index = 7
+        local index = 5
         local tagCount = tonumber(ARGV[index])
         index = index + 1
         for _ = 1, tagCount do
             replace(ARGV[index])
-            purgeLegacy(ARGV[index])
             index = index + 1
         end
         local result = {generation}
@@ -466,9 +415,6 @@ final class LuaScripts
                                 changed[child] = true
                             elseif child then
                                 cascaded = cascaded + 1
-                                for p = 1, prefixCount do
-                                    purgeLegacy(prefixes[p] .. child)
-                                end
                                 local prefix = cascadePrefix .. child .. ':'
                                 replace(cascadeAny(prefix))
                                 replace(cascadeVia(prefix, column))
@@ -492,7 +438,6 @@ final class LuaScripts
                 cascaded = cascaded + 1
                 for p = 1, prefixCount do
                     replace(prefixes[p] .. dependent)
-                    purgeLegacy(prefixes[p] .. dependent)
                 end
             end
             if tagCount > 0 then

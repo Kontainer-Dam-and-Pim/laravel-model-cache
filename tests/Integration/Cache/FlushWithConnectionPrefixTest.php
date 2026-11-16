@@ -62,37 +62,6 @@ class FlushWithConnectionPrefixTest extends TestCase
         $this->assertSame(['app_lada:generation', 'app_lada:server'], $remaining);
     }
 
-    public function testLegacyInvalidationDeletesEarlierVersionsEntriesUnderConnectionPrefix(): void
-    {
-        config(['lada-cache.legacy_invalidation' => true]);
-        $cache = $this->freshCache();
-        $client = RedisFacade::connection('cache');
-        $client->command('sadd', ['lada:tags:database:db:table_unspecific:cars', 'lada:legacy-hash']);
-        $client->command('set', ['lada:legacy-hash', 'serialized rows']);
-
-        $cache->invalidate(Invalidation::of(['tags:database:db:table_unspecific:cars']));
-
-        $this->assertSame([], $client->keys('lada:tags:*'));
-        $this->assertSame([], $client->keys('lada:legacy-hash'));
-    }
-
-    public function testEarlierVersionsInvalidationsReachThisVersionsEntriesUnderConnectionPrefix(): void
-    {
-        config(['lada-cache.legacy_invalidation' => true]);
-        $cache = $this->freshCache();
-        $client = RedisFacade::connection('cache');
-        $this->seedEntry($cache, 'k1', ['tags:database:db:table_unspecific:cars'], ['row']);
-        $members = $client->command('smembers', ['lada:tags:database:db:table_unspecific:cars']);
-        $this->assertSame(['lada:legacy:tags:database:db:table_unspecific:cars'], $members);
-
-        $client->command('del', ['lada:tags:database:db:table_unspecific:cars']);
-        foreach ($members as $member) {
-            $client->command('del', [$member]);
-        }
-
-        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['tags:database:db:table_unspecific:cars'], []));
-    }
-
     private function freshCache(): Cache
     {
         RedisFacade::purge('cache');
