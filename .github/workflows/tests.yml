@@ -235,21 +235,18 @@ jobs:
           retention-days: 7
 
   benchmark:
-    name: Benchmark on ${{ matrix.database }} with ${{ matrix.redis-client }}
+    name: Benchmark on ${{ matrix.database }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     services: *services
 
     strategy:
       fail-fast: false
       matrix:
         database: [sqlite, mysql, mariadb, pgsql]
-        redis-client: [phpredis, predis]
 
     env:
       DB_CONNECTION: ${{ matrix.database }}
-      REDIS_CLIENT: ${{ matrix.redis-client }}
-      MODEL_CACHE_BENCHMARK_REPORT: ${{ github.workspace }}/benchmark.json
 
     steps:
       - uses: actions/checkout@v7
@@ -258,19 +255,44 @@ jobs:
         with:
           php: '8.4'
 
-      - name: Run benchmark
-        id: suite
+      - name: Run benchmark with phpredis
+        id: phpredis
+        env:
+          REDIS_CLIENT: phpredis
+          MODEL_CACHE_BENCHMARK_REPORT: ${{ runner.temp }}/benchmark-phpredis.json
+        run: vendor/bin/phpunit --no-coverage tests/Benchmark
+
+      - name: Run benchmark with Predis on the same runner
+        id: predis
+        if: always() && steps.phpredis.outcome != 'skipped'
+        env:
+          REDIS_CLIENT: predis
+          MODEL_CACHE_BENCHMARK_REPORT: ${{ runner.temp }}/benchmark-predis.json
         run: vendor/bin/phpunit --no-coverage tests/Benchmark
 
       - uses: ./.github/actions/record
-        if: always() && steps.suite.outcome != 'skipped'
+        if: always() && steps.phpredis.outcome != 'skipped'
+        env:
+          REDIS_CLIENT: phpredis
         with:
           kind: benchmark
-          outcome: ${{ steps.suite.outcome }}
-          name: benchmark-${{ matrix.database }}-${{ matrix.redis-client }}
+          outcome: ${{ steps.phpredis.outcome }}
+          name: benchmark-${{ matrix.database }}-phpredis
           database-container: ${{ job.services[matrix.database].id }}
           redis-container: ${{ job.services.redis.id }}
-          benchmark: ${{ steps.suite.outcome == 'success' && env.MODEL_CACHE_BENCHMARK_REPORT || '' }}
+          benchmark: ${{ steps.phpredis.outcome == 'success' && format('{0}/benchmark-phpredis.json', runner.temp) || '' }}
+
+      - uses: ./.github/actions/record
+        if: always() && steps.predis.outcome != 'skipped'
+        env:
+          REDIS_CLIENT: predis
+        with:
+          kind: benchmark
+          outcome: ${{ steps.predis.outcome }}
+          name: benchmark-${{ matrix.database }}-predis
+          database-container: ${{ job.services[matrix.database].id }}
+          redis-container: ${{ job.services.redis.id }}
+          benchmark: ${{ steps.predis.outcome == 'success' && format('{0}/benchmark-predis.json', runner.temp) || '' }}
 
   quality:
     runs-on: ubuntu-latest

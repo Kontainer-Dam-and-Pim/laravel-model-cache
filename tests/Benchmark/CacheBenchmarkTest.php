@@ -22,6 +22,8 @@ final class CacheBenchmarkTest extends TestCase
 
     private const int DISTINCT_QUERIES = 50;
 
+    private const int ROUNDS = 5;
+
     public function testReportCachedReadThroughput(): void
     {
         $this->seedCarsAndDrivers();
@@ -55,21 +57,37 @@ final class CacheBenchmarkTest extends TestCase
      */
     private function measureShape(BenchmarkShape $shape): array
     {
-        config(['model-cache.active' => false]);
-        $uncached = $this->readsPerSecond($shape);
-        config(['model-cache.active' => true]);
-
         $this->readsPerSecond($shape);
-        $cached = $this->readsPerSecond($shape);
+        $uncached = [];
+        $cached = [];
+
+        for ($round = 0; $round < self::ROUNDS; $round++) {
+            config(['model-cache.active' => false]);
+            $uncached[] = $this->readsPerSecond($shape);
+            config(['model-cache.active' => true]);
+            $cached[] = $this->readsPerSecond($shape);
+        }
+
         $redisCommands = count($this->recordRedisCommands(fn () => $this->readsPerSecond($shape)));
 
         return [
             'shape' => $shape->value,
             'label' => $shape->label(),
-            'uncached_reads_per_second' => $uncached,
-            'cached_reads_per_second' => $cached,
+            'uncached_reads_per_second' => self::median($uncached),
+            'cached_reads_per_second' => self::median($cached),
             'redis_commands' => $redisCommands,
         ];
+    }
+
+    /**
+     * @param  non-empty-list<float>  $values
+     */
+    private static function median(array $values): float
+    {
+        sort($values);
+        $middle = intdiv(count($values), 2);
+
+        return count($values) % 2 === 1 ? $values[$middle] : ($values[$middle - 1] + $values[$middle]) / 2;
     }
 
     private function readsPerSecond(BenchmarkShape $shape): float
@@ -111,6 +129,7 @@ final class CacheBenchmarkTest extends TestCase
         $json = json_encode([
             'reads' => self::READS,
             'distinct_queries' => self::DISTINCT_QUERIES,
+            'rounds' => self::ROUNDS,
             'cars' => self::CARS,
             'shapes' => $results,
         ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
