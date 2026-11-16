@@ -27,7 +27,7 @@ Automatic Redis query cache for Laravel's query builder and Eloquent, with inval
 | Component | Version                                                        |
 |-----------|----------------------------------------------------------------|
 | PHP       | 8.3+                                                           |
-| Laravel   | 13.x                                                           |
+| Laravel   | 13.40+                                                         |
 | Redis     | Standalone server, optionally with replicas and Sentinel       |
 | Client    | phpredis or Predis                                             |
 | Databases | MySQL, MariaDB, PostgreSQL, SQLite, SQL Server                 |
