@@ -15,10 +15,20 @@
     ],
     "authors": [
         {
+            "name": "Kontainer",
+            "homepage": "https://kontainer.com",
+            "role": "Maintainer"
+        },
+        {
             "name": "Matthias Isler",
-            "email": "mi@matthias-isler.ch"
+            "email": "mi@matthias-isler.ch",
+            "role": "Original author of Lada Cache"
         }
     ],
+    "support": {
+        "issues": "https://github.com/Kontainer-Dam-and-Pim/laravel-model-cache/issues",
+        "source": "https://github.com/Kontainer-Dam-and-Pim/laravel-model-cache"
+    },
     "require": {
         "php": "^8.3",
         "illuminate/support": "^13.40",
