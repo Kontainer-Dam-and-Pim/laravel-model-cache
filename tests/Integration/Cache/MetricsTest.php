@@ -6,6 +6,7 @@ namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Kontainer\ModelCache\LuaScripts;
 use Kontainer\ModelCache\Metrics;
 use Kontainer\ModelCache\Services;
 use Kontainer\ModelCache\Tests\Concerns\RecordsRedisCommands;
@@ -91,6 +92,7 @@ final class MetricsTest extends TestCase
     {
         DB::table('owners')->whereRaw('current_timestamp is not null')->get();
         DB::table('owners')->whereRaw('current_timestamp is not null')->get();
+        Services::redis()->script('load', LuaScripts::COUNT);
 
         $first = $this->recordRedisCommands(fn () => $this->app->terminate());
         $second = $this->recordRedisCommands(fn () => $this->app->terminate());
