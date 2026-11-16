@@ -86,6 +86,16 @@ final class GenericDialect implements Dialect
         return true;
     }
 
+    public function supportsValuesAsTableFactor(): bool
+    {
+        return true;
+    }
+
+    public function supportsFromFirstSelect(): bool
+    {
+        return true;
+    }
+
     public function supportsTablePartitions(): bool
     {
         return true;

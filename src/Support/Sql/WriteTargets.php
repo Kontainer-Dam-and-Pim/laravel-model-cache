@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache\Support\Sql;
 
+use LogicException;
+
 /**
  * The tables a parsed write statement changes rows of. Multi-table forms name their targets by
  * alias or table name among the relations they join; a target that resolves to no named table,
@@ -131,10 +133,7 @@ final class WriteTargets
 
         foreach ($relations as $relation) {
             foreach ($relation->tables() as $table) {
-                $name = $table->name;
-                if ($name === null) {
-                    continue;
-                }
+                $name = $table->name ?? throw new LogicException('TableFactor::tables() returned a relation without a name.');
                 foreach (array_filter([$table->alias, $name[array_key_last($name)]]) as $reference) {
                     $references[strtolower($reference)][implode("\0", $name)] = $name;
                 }

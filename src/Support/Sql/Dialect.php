@@ -12,16 +12,6 @@ interface Dialect
 {
     public function isDelimitedIdentifierStart(string $ch): bool;
 
-    public function isNestedDelimitedIdentifierStart(string $ch): bool;
-
-    /**
-     * Receives the input from the potential opening quote onwards and returns the outer quote and, when present, the
-     * nested quote, or null when the input does not start a nested delimited identifier.
-     *
-     * @return array{string, ?string}|null
-     */
-    public function peekNestedDelimitedIdentifierQuotes(string $chars): ?array;
-
     public function isIdentifierStart(string $ch): bool;
 
     public function isIdentifierPart(string $ch): bool;
@@ -39,8 +29,6 @@ interface Dialect
     public function supportsUnicodeStringLiteral(): bool;
 
     public function supportsNumericPrefix(): bool;
-
-    public function supportsTupleElementAccess(): bool;
 
     public function supportsNumericLiteralUnderscores(): bool;
 
@@ -105,4 +93,8 @@ interface Dialect
     public function supportsStringLiteralTableAlias(bool $explicit): bool;
 
     public function supportsInTableExpression(): bool;
+
+    public function supportsValuesAsTableFactor(): bool;
+
+    public function supportsFromFirstSelect(): bool;
 }

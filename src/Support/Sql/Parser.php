@@ -90,13 +90,13 @@ final class Parser
             $this->index = $position + 1;
 
             if ($token->isKeyword('FROM') && ! $this->isFunctionArgumentFrom($position, $openers)) {
-                $relations = [...$relations, ...$this->parseTableWithJoins()];
-                $this->expectEndOfFromClause();
+                $relations = [...$relations, ...($this->isDeleteFrom($position) ? $this->parseCommaSeparatedTablesAndJoins() : $this->parseTableWithJoins())];
+                $this->expectEndOfFromClause($this->startsFromFirstQuery($position));
             } elseif ($token->isKeyword('JOIN') && $position >= $parsedUntil) {
                 $relations[] = $this->parseTableFactor();
             } elseif ($this->startsTableQueryBody($position)) {
                 $relations[] = TableFactor::table($this->parseObjectName(), null);
-            } elseif ($this->startsInTableTarget($position)) {
+            } elseif ($this->startsInTableTarget($position, $openers)) {
                 $name = $this->parseObjectName();
                 if (! $this->peekIs(TokenKind::LParen)) {
                     $relations[] = TableFactor::table($name, null);
@@ -111,12 +111,35 @@ final class Parser
         return $relations;
     }
 
-    private function startsInTableTarget(int $position): bool
+    /**
+     * Whether the FROM at the position is a DELETE's, whose relations are a plain comma-separated list.
+     */
+    private function isDeleteFrom(int $position): bool
+    {
+        $before = $position - 1;
+        while (($token = $this->tokens[$before] ?? null) !== null
+            && ! $token->isKeyword('DELETE')
+            && ($token->isWord() || $token->is(TokenKind::Period) || $token->is(TokenKind::Comma) || $token->is(TokenKind::Mul))) {
+            $before--;
+        }
+
+        return $token?->isKeyword('DELETE') === true;
+    }
+
+    /**
+     * Whether the position holds the IN of an `x IN t` test against a table, rather than the search
+     * modifier of a fulltext `AGAINST ('...' IN BOOLEAN MODE)`.
+     *
+     * @param  array<int, int|null>  $openers
+     */
+    private function startsInTableTarget(int $position, array $openers): bool
     {
         $next = $this->tokens[$position + 1] ?? null;
+        $opener = $openers[$position] ?? null;
 
         return $this->dialect->supportsInTableExpression()
             && $this->tokens[$position]->isKeyword('IN')
+            && ($opener === null || ($this->tokens[$opener - 1] ?? null)?->isKeyword('AGAINST') !== true)
             && $next !== null && $next->isWord() && $this->dialect->isTableFactor($next);
     }
 
@@ -135,7 +158,7 @@ final class Parser
 
     private function parseReplace(): InsertStatement
     {
-        if (! $this->dialect instanceof MySqlDialect && ! $this->dialect instanceof SQLiteDialect) {
+        if (! $this->dialect instanceof MySqlDialect && ! $this->dialect instanceof SQLiteDialect && ! $this->dialect instanceof GenericDialect) {
             throw new ParserException('Unsupported statement REPLACE');
         }
 
@@ -266,8 +289,9 @@ final class Parser
     }
 
     /**
-     * The keyword that starts the clause returning a write's rows: none in MySQL, whose UPDATE
-     * returns none, and T-SQL's `OUTPUT` instead of `RETURNING`. Either is a column name elsewhere.
+     * The keywords that start the clause returning a write's rows: none in MySQL, whose UPDATE
+     * returns none, T-SQL's `OUTPUT` instead of `RETURNING`, and both in the generic dialect. Either
+     * is a column name elsewhere.
      *
      * @return list<string>
      */
@@ -276,6 +300,7 @@ final class Parser
         return match (true) {
             $this->dialect instanceof MySqlDialect => [],
             $this->dialect instanceof MsSqlDialect => ['OUTPUT'],
+            $this->dialect instanceof GenericDialect => ['RETURNING', 'OUTPUT'],
             default => ['RETURNING'],
         };
     }
@@ -286,7 +311,7 @@ final class Parser
      */
     private function maybeParseOutputClause(): bool
     {
-        if (! $this->dialect instanceof MsSqlDialect || ! $this->parseKeyword('OUTPUT')) {
+        if (! in_array('OUTPUT', $this->returningKeywords(), true) || ! $this->parseKeyword('OUTPUT')) {
             return false;
         }
 
@@ -562,7 +587,18 @@ final class Parser
             return $this->isDerivedTableAhead() ? $this->parseDerivedTableFactor() : $this->parseParenthesizedTableFactor();
         }
 
-        if ($this->dialect instanceof PostgreSqlDialect && $this->peekKeywords('UNNEST') && $this->peekIs(TokenKind::LParen, 1)) {
+        if ($this->dialect->supportsValuesAsTableFactor() && $this->peekKeywords('VALUES') && $this->peekIs(TokenKind::LParen, 1)) {
+            $this->index++;
+            $this->expectGroup();
+            while ($this->peekIs(TokenKind::Comma) && $this->peekIs(TokenKind::LParen, 1)) {
+                $this->index++;
+                $this->expectGroup();
+            }
+
+            return TableFactor::derived($this->maybeParseTableAlias());
+        }
+
+        if (($this->dialect instanceof PostgreSqlDialect || $this->dialect instanceof GenericDialect) && $this->peekKeywords('UNNEST') && $this->peekIs(TokenKind::LParen, 1)) {
             $this->index++;
             $this->expectGroup();
             $this->parseWithOrdinality();
@@ -882,16 +918,53 @@ final class Parser
         throw new ParserException('Unbalanced parentheses');
     }
 
-    private function expectEndOfFromClause(): void
+    /**
+     * Whether the FROM at the position starts a query that names its relations before its SELECT
+     * (`FROM t SELECT a`): at the start of the statement or of a parenthesized query, or after the
+     * last CTE of a WITH clause.
+     */
+    private function startsFromFirstQuery(int $position): bool
+    {
+        if (! $this->dialect->supportsFromFirstSelect()) {
+            return false;
+        }
+
+        $previous = $this->tokens[$position - 1] ?? null;
+
+        return $previous === null
+            || $previous->is(TokenKind::LParen)
+            || ($previous->is(TokenKind::RParen) && ($this->tokens[$this->openingParenthesis($position - 1) - 1] ?? null)?->isKeyword('AS', 'MATERIALIZED') === true);
+    }
+
+    private function openingParenthesis(int $closing): int
+    {
+        $depth = 0;
+
+        for ($position = $closing; $position >= 0; $position--) {
+            if ($this->tokens[$position]->is(TokenKind::RParen)) {
+                $depth++;
+            } elseif ($this->tokens[$position]->is(TokenKind::LParen) && --$depth === 0) {
+                return $position;
+            }
+        }
+
+        throw new ParserException('Unbalanced parentheses');
+    }
+
+    private function expectEndOfFromClause(bool $selectMayFollow): void
     {
         $token = $this->peek();
 
         if ($token === null
+            || ($selectMayFollow && $token->isKeyword('SELECT'))
             || $token->is(TokenKind::RParen)
             || $token->is(TokenKind::SemiColon)
             || $token->isKeyword(...self::CLAUSE_KEYWORDS)
             || $this->peekKeywords('ON', 'DUPLICATE')
             || $this->peekKeywords('ON', 'CONFLICT')
+            || $this->peekKeywords('CONNECT', 'BY')
+            || $this->peekKeywords('START', 'WITH')
+            || $token->is(TokenKind::VerticalBarRightAngleBracket)
             || ($token->isKeyword('FOR') && $this->peek(1)?->isKeyword(...self::LOCKING_AND_FOR_CLAUSE_KEYWORDS) === true)) {
             return;
         }

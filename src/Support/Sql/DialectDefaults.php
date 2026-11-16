@@ -15,19 +15,6 @@ trait DialectDefaults
         return $ch === '"' || $ch === '`';
     }
 
-    public function isNestedDelimitedIdentifierStart(string $ch): bool
-    {
-        return false;
-    }
-
-    /**
-     * @return array{string, ?string}|null
-     */
-    public function peekNestedDelimitedIdentifierQuotes(string $chars): ?array
-    {
-        return null;
-    }
-
     public function isCustomOperatorPart(string $ch): bool
     {
         return false;
@@ -59,11 +46,6 @@ trait DialectDefaults
     }
 
     public function supportsNumericPrefix(): bool
-    {
-        return false;
-    }
-
-    public function supportsTupleElementAccess(): bool
     {
         return false;
     }
@@ -224,6 +206,16 @@ trait DialectDefaults
     }
 
     public function supportsInTableExpression(): bool
+    {
+        return false;
+    }
+
+    public function supportsValuesAsTableFactor(): bool
+    {
+        return false;
+    }
+
+    public function supportsFromFirstSelect(): bool
     {
         return false;
     }

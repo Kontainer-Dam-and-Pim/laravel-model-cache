@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Kontainer\ModelCache\Tests\Unit\Support\Sql;
 
 use Closure;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\MySqlConnection;
 use InvalidArgumentException;
 use Kontainer\ModelCache\Support\Sql\Character;
@@ -1119,9 +1120,30 @@ final class TokenizerTest extends TestCase
         ]);
     }
 
-    public function testTokenizePeriodBeforeDigitsWithoutTupleElementAccess(): void
+    #[DataProvider('allDialects')]
+    public function testTokenizePeriodBeforeDigitsAfterIdentifierOrBracket(Dialect $dialect): void
     {
+        $this->assertTokens($dialect, 't .1', [self::word('t'), self::space(), self::number('.1')]);
+        $this->assertTokens($dialect, '1.5', [self::number('1.5')]);
+        $this->assertTokens($dialect, '.5', [self::number('.5')]);
         $this->assertTokens(new GenericDialect, 't.1', [self::word('t'), self::number('.1')]);
+    }
+
+    public function testTokenizeClickhouseDoubleEqual(): void
+    {
+        $this->assertTokens(new GenericDialect, "SELECT foo=='1'", [
+            self::word('SELECT'),
+            self::space(),
+            self::word('foo'),
+            self::symbol(TokenKind::DoubleEq, '=='),
+            self::string('1'),
+        ]);
+    }
+
+    #[DataProvider('allDialects')]
+    public function testTokenizeSnowflakeDiv(Dialect $dialect): void
+    {
+        $this->assertTokens($dialect, 'field/1000', [self::word('field'), self::symbol(TokenKind::Div, '/'), self::number('1000')]);
     }
 
     public function testTokenizeCopyFromStdinPayload(): void
@@ -1355,6 +1377,288 @@ final class TokenizerTest extends TestCase
         $this->assertTokenizeFails(new MySqlDialect, "SELECT 'ä\xC3'", 'Invalid UTF-8', 10);
     }
 
+    public function testParseCopyFromStdinBareSemicolon(): void
+    {
+        $this->assertNoCopyData(new PostgreSqlDialect, 'COPY t FROM STDIN;');
+    }
+
+    public function testParseCopyFromStdinPayloadCrlf(): void
+    {
+        $this->assertSame([[TokenKind::CopyData, "row1\r\nrow2\r\n", '\.']], self::copyData(new PostgreSqlDialect, "COPY t FROM STDIN;\r\nrow1\r\nrow2\r\n\\.\r\n"));
+    }
+
+    public function testParseCopyFromStdinPayloadCrOnlyLineEnds(): void
+    {
+        $this->assertSame([[TokenKind::CopyData, "row1\r", '\.']], self::copyData(new PostgreSqlDialect, "COPY t FROM STDIN;\rrow1\r\\."));
+        $this->assertSame([[TokenKind::CopyData, "row1\r\n", null]], self::copyData(new PostgreSqlDialect, "COPY t FROM STDIN;\rrow1\r\n"));
+    }
+
+    public function testParseQuoteDelimitedString(): void
+    {
+        $tokens = (new Tokenizer(new GenericDialect, "SELECT Q'.abc.', Q'Xab'cX', Q'|abc'''|', Q'{abc}d}', Q'[]abc[]', Q'<a'bc>', Q'<<<a'bc>', Q'('abc'('abc)', Q'(abc'def))', Q'(abc'def)))' FROM dual"))->tokenize();
+
+        $this->assertSame([
+            [TokenKind::QuoteDelimitedStringLiteral, 'abc', '.'],
+            [TokenKind::QuoteDelimitedStringLiteral, "ab'c", 'X'],
+            [TokenKind::QuoteDelimitedStringLiteral, "abc'''", '|'],
+            [TokenKind::QuoteDelimitedStringLiteral, 'abc}d', '{'],
+            [TokenKind::QuoteDelimitedStringLiteral, ']abc[', '['],
+            [TokenKind::QuoteDelimitedStringLiteral, "a'bc", '<'],
+            [TokenKind::QuoteDelimitedStringLiteral, "<<a'bc", '<'],
+            [TokenKind::QuoteDelimitedStringLiteral, "'abc'('abc", '('],
+            [TokenKind::QuoteDelimitedStringLiteral, "abc'def)", '('],
+            [TokenKind::QuoteDelimitedStringLiteral, "abc'def))", '('],
+        ], self::describe(array_values(array_filter($tokens, static fn (Token $token): bool => $token->is(TokenKind::QuoteDelimitedStringLiteral)))));
+    }
+
+    public function testParseInvalidQuoteDelimitedStrings(): void
+    {
+        foreach ([' ', "\t", "\n", "\r"] as $quote) {
+            $this->assertTokenizeFails(new GenericDialect, "SELECT Q'{$quote}abc{$quote}' FROM dual", "Invalid space, tab, newline, or EOF after 'Q''", 9);
+        }
+        $this->assertTokenizeFails(new GenericDialect, "SELECT Q'", "Invalid space, tab, newline, or EOF after 'Q''", 9);
+        $this->assertTokenizeFails(new GenericDialect, "SELECT Q'|asdfa....", 'Unterminated string literal', 8);
+    }
+
+    public function testParseQuoteDelimitedStringLowercase(): void
+    {
+        $this->assertTokens(new GenericDialect, "select q'!a'b'c!d!'", [self::word('select'), self::space(), self::literal(TokenKind::QuoteDelimitedStringLiteral, "a'b'c!d", '!')]);
+    }
+
+    public function testParseQuoteDelimitedStringButIsAWord(): void
+    {
+        $this->assertTokens(new GenericDialect, 'SELECT q, quux, q.abc', [
+            self::word('SELECT'),
+            self::space(),
+            self::word('q'),
+            self::symbol(TokenKind::Comma, ','),
+            self::space(),
+            self::word('quux'),
+            self::symbol(TokenKind::Comma, ','),
+            self::space(),
+            self::word('q'),
+            self::symbol(TokenKind::Period, '.'),
+            self::word('abc'),
+        ]);
+    }
+
+    public function testParseNationalQuoteDelimitedString(): void
+    {
+        $this->assertTokens(new GenericDialect, "SELECT NQ'.abc.'", [self::word('SELECT'), self::space(), self::literal(TokenKind::NationalQuoteDelimitedStringLiteral, 'abc', '.')]);
+    }
+
+    public function testParseNationalQuoteDelimitedStringLowercase(): void
+    {
+        foreach (['nq', 'Nq', 'nQ', 'NQ'] as $prefix) {
+            $this->assertTokens(new GenericDialect, "select {$prefix}'!a'b'c!d!'", [self::word('select'), self::space(), self::literal(TokenKind::NationalQuoteDelimitedStringLiteral, "a'b'c!d", '!')]);
+        }
+    }
+
+    public function testParseNationalQuoteDelimitedStringButIsAWord(): void
+    {
+        $this->assertTokens(new GenericDialect, 'SELECT nq, nqoo', [
+            self::word('SELECT'),
+            self::space(),
+            self::word('nq'),
+            self::symbol(TokenKind::Comma, ','),
+            self::space(),
+            self::word('nqoo'),
+        ]);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function unicodeStringLiterals(): array
+    {
+        return [
+            'cyrillic' => ["U&'\\0441\\043B\\043E\\043D'", 'слон'],
+            'six digits' => ["U&'\\+01F418'", '🐘'],
+            'escaped backslash' => ["U&'\\\\'", '\\'],
+            'doubled quote' => ["U&''''", "'"],
+        ];
+    }
+
+    #[DataProvider('unicodeStringLiterals')]
+    public function testUnicodeStringLiteral(string $sql, string $expected): void
+    {
+        foreach ([new PostgreSqlDialect, new GenericDialect] as $dialect) {
+            $this->assertTokens($dialect, $sql, [self::literal(TokenKind::UnicodeStringLiteral, $expected)]);
+        }
+    }
+
+    public function testUnicodeStringLiteralErrors(): void
+    {
+        $dialect = new PostgreSqlDialect;
+
+        $this->assertTokenizeFails($dialect, "U&'abc", 'Unterminated unicode encoded string literal', 6);
+        $this->assertTokenizeFails($dialect, "U&'\\00", 'Unexpected EOF while parsing hex digit in escaped unicode string.', 6);
+        $this->assertTokenizeFails($dialect, "U&'\\00g1'", 'Invalid hex digit in escaped unicode string: g', 7);
+        $this->assertTokenizeFails($dialect, "U&'\\00é1'", 'Invalid hex digit in escaped unicode string: é', 8);
+        $this->assertTokenizeFails($dialect, "U&'\\D800'", 'Invalid unicode character: d800', 8);
+    }
+
+    public function testParseBitstringLiteral(): void
+    {
+        foreach ([new MySqlDialect, new GenericDialect] as $dialect) {
+            $this->assertTokens($dialect, "SELECT B'111'", [self::word('SELECT'), self::space(), self::literal(TokenKind::SingleQuotedByteStringLiteral, '111')]);
+            $this->assertTokens($dialect, "SELECT B''''", [self::word('SELECT'), self::space(), self::literal(TokenKind::SingleQuotedByteStringLiteral, "'")]);
+            $this->assertTokens($dialect, "SELECT B'it''s'", [self::word('SELECT'), self::space(), self::literal(TokenKind::SingleQuotedByteStringLiteral, "it's")]);
+            $this->assertTokens($dialect, 'SELECT B"abc"', [self::word('SELECT'), self::space(), self::literal(TokenKind::DoubleQuotedByteStringLiteral, 'abc')]);
+        }
+    }
+
+    public function testParseRawLiteral(): void
+    {
+        $this->assertTokens(new GenericDialect, 'R\'abc\', R"abc", R\'f\(abc,(.*),def\)\', R"f\(abc,(.*),def\)", R\'\'\'abc\'\'\', R"""abc""", R\'\', r', [
+            self::literal(TokenKind::SingleQuotedRawStringLiteral, 'abc'),
+            self::symbol(TokenKind::Comma, ','),
+            self::space(),
+            self::literal(TokenKind::DoubleQuotedRawStringLiteral, 'abc'),
+            self::symbol(TokenKind::Comma, ','),
+            self::space(),
+            self::literal(TokenKind::SingleQuotedRawStringLiteral, 'f\(abc,(.*),def\)'),
+            self::symbol(TokenKind::Comma, ','),
+            self::space(),
+            self::literal(TokenKind::DoubleQuotedRawStringLiteral, 'f\(abc,(.*),def\)'),
+            self::symbol(TokenKind::Comma, ','),
+            self::space(),
+            self::literal(TokenKind::TripleSingleQuotedRawStringLiteral, 'abc'),
+            self::symbol(TokenKind::Comma, ','),
+            self::space(),
+            self::literal(TokenKind::TripleDoubleQuotedRawStringLiteral, 'abc'),
+            self::symbol(TokenKind::Comma, ','),
+            self::space(),
+            self::literal(TokenKind::SingleQuotedRawStringLiteral, ''),
+            self::symbol(TokenKind::Comma, ','),
+            self::space(),
+            self::word('r'),
+        ]);
+    }
+
+    public function testParseNonDecimalIntegerLiterals(): void
+    {
+        $expected = [self::word('SELECT'), self::space()];
+        foreach (['0x1F', '0X1F', '0o17', '0O17', '0b101', '0B101', '0x_1F', '0xFF_FF'] as $i => $number) {
+            if ($i > 0) {
+                array_push($expected, self::symbol(TokenKind::Comma, ','), self::space());
+            }
+            $expected[] = self::number($number);
+        }
+        $this->assertTokens(new PostgreSqlDialect, 'SELECT 0x1F, 0X1F, 0o17, 0O17, 0b101, 0B101, 0x_1F, 0xFF_FF', $expected);
+
+        foreach ([
+            'SELECT 0x' => "Expected a hexadecimal digit after '0x'",
+            'SELECT 0Xg' => "Expected a hexadecimal digit after '0X'",
+            'SELECT 0o8' => "Expected an octal digit after '0o'",
+            'SELECT 0b2' => "Expected a binary digit after '0b'",
+            'SELECT 0x_' => "Expected a hexadecimal digit after '0x'",
+            'SELECT 0x__1' => "Unexpected character '_'",
+            'SELECT 0x1_' => "Unexpected character '_'",
+        ] as $sql => $reason) {
+            $this->assertTokenizeFails(new PostgreSqlDialect, $sql, $reason);
+        }
+    }
+
+    /**
+     * @return array<string, array{string, TokenKind}>
+     */
+    public static function geometricOperators(): array
+    {
+        return [
+            '<<|' => ['<<|', TokenKind::ShiftLeftVerticalBar],
+            '<|' => ['<|', TokenKind::ShiftLeftVerticalBar],
+            '&<|' => ['&<|', TokenKind::AmpersandLeftAngleBracketVerticalBar],
+            '&<' => ['&<', TokenKind::AmpersandLeftAngleBracket],
+            '##' => ['##', TokenKind::DoubleSharp],
+            '?||' => ['?||', TokenKind::QuestionMarkDoubleVerticalBar],
+            '?|' => ['?|', TokenKind::QuestionPipe],
+            '?&' => ['?&', TokenKind::QuestionAnd],
+            '?-|' => ['?-|', TokenKind::QuestionMarkDashVerticalBar],
+            '?-' => ['?-', TokenKind::QuestionMarkDash],
+            '?#' => ['?#', TokenKind::QuestionMarkSharp],
+            '<^' => ['<^', TokenKind::LeftAngleBracketCaret],
+            '>^' => ['>^', TokenKind::RightAngleBracketCaret],
+            '|&>' => ['|&>', TokenKind::VerticalBarAmpersandRightAngleBracket],
+            '|>>' => ['|>>', TokenKind::VerticalBarShiftRight],
+            '<->' => ['<->', TokenKind::TwoWayArrow],
+            '~=' => ['~=', TokenKind::TildeEqual],
+            '@-@' => ['@-@', TokenKind::AtDashAt],
+            '@@' => ['@@', TokenKind::AtAt],
+        ];
+    }
+
+    #[DataProvider('geometricOperators')]
+    public function testGeometricBinaryOperators(string $operator, TokenKind $kind): void
+    {
+        $this->assertTokens(new PostgreSqlDialect, "a {$operator} b", [self::word('a'), self::space(), self::symbol($kind, $operator), self::space(), self::word('b')]);
+    }
+
+    public function testGeometricOperatorConsumingItsNextCharacter(): void
+    {
+        $this->assertTokens(new PostgreSqlDialect, 'a &> b', [self::word('a'), self::space(), self::symbol(TokenKind::AmpersandRightAngleBracket, '&> '), self::word('b')]);
+    }
+
+    public function testParsePgUnaryOps(): void
+    {
+        $this->assertTokens(new PostgreSqlDialect, 'SELECT |/ 25', [self::word('SELECT'), self::space(), self::symbol(TokenKind::PGSquareRoot, '|/'), self::space(), self::number('25')]);
+        $this->assertTokens(new PostgreSqlDialect, 'SELECT ||/ 27', [self::word('SELECT'), self::space(), self::symbol(TokenKind::PGCubeRoot, '||/'), self::space(), self::number('27')]);
+        $this->assertTokens(new PostgreSqlDialect, 'SELECT !!a', [self::word('SELECT'), self::space(), self::symbol(TokenKind::DoubleExclamationMark, '!!'), self::word('a')]);
+        $this->assertTokens(new PostgreSqlDialect, 'SELECT !a', [self::word('SELECT'), self::space(), self::symbol(TokenKind::ExclamationMark, '!'), self::word('a')]);
+        $this->assertTokens(new PostgreSqlDialect, 'a # b', [self::word('a'), self::space(), self::symbol(TokenKind::Sharp, '#'), self::space(), self::word('b')]);
+    }
+
+    public function testParseMssqlIdentifiers(): void
+    {
+        $this->assertTokens(new MsSqlDialect, 'SELECT @@version, _foo$123 FROM ##temp', [
+            self::word('SELECT'),
+            self::space(),
+            self::word('@@version'),
+            self::symbol(TokenKind::Comma, ','),
+            self::space(),
+            self::word('_foo$123'),
+            self::space(),
+            self::word('FROM'),
+            self::space(),
+            self::word('##temp'),
+        ]);
+    }
+
+    public function testMoneyLiteralsAreMssqlPlaceholders(): void
+    {
+        $this->assertTokens(new MsSqlDialect, 'SELECT $1.50', [self::word('SELECT'), self::space(), self::symbol(TokenKind::Placeholder, '$1.50')]);
+        $this->assertTokens(new PostgreSqlDialect, 'SELECT $1.50', [self::word('SELECT'), self::space(), self::symbol(TokenKind::Placeholder, '$1'), self::number('.50')]);
+    }
+
+    public function testOperatorsOutsideTheirDialect(): void
+    {
+        $this->assertTokens(new MySqlDialect, 'a <=> b', [self::word('a'), self::space(), self::symbol(TokenKind::Spaceship, '<=>'), self::space(), self::word('b')]);
+        $this->assertTokens(new MySqlDialect, 'a |> b', [self::word('a'), self::space(), self::symbol(TokenKind::Pipe, '|'), self::symbol(TokenKind::Gt, '>'), self::space(), self::word('b')]);
+        $this->assertTokens(new MySqlDialect, 'SELECT @@ x', [self::word('SELECT'), self::space(), self::symbol(TokenKind::AtAt, '@@'), self::space(), self::word('x')]);
+        $this->assertTokens(new GenericDialect, 'a // b', [self::word('a'), self::space(), self::symbol(TokenKind::DuckIntDiv, '//'), self::space(), self::word('b')]);
+        $this->assertTokens(new GenericDialect, 'a % b', [self::word('a'), self::space(), self::symbol(TokenKind::Mod, '%'), self::space(), self::word('b')]);
+        $this->assertTokens(new GenericDialect, 'SELECT 1L', [self::word('SELECT'), self::space(), self::number('1L')]);
+    }
+
+    public function testMySqlHashComment(): void
+    {
+        $this->assertTokens(new MySqlDialect, "SELECT 1 # comment\n", [self::word('SELECT'), self::space(), self::number('1'), self::space(), self::comment(' comment'), self::space()]);
+    }
+
+    public function testUnterminatedEscapedStrings(): void
+    {
+        foreach (["E'abc", "E'abc\\", "E'\\u00g1'"] as $sql) {
+            $this->assertTokenizeFails(new PostgreSqlDialect, $sql, 'Unterminated encoded string literal', 0);
+        }
+    }
+
+    public function testADialectNeedsADatabaseConnection(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Dialects::of($this->createStub(ConnectionInterface::class));
+    }
+
     /**
      * @param  Closure(Dialect): bool  $predicate
      * @return array<string, array{Dialect}>
@@ -1434,6 +1738,14 @@ final class TokenizerTest extends TestCase
         $tokens = (new Tokenizer($dialect, $sql))->tokenize();
 
         $this->assertSame([], array_filter($tokens, static fn (Token $token): bool => $token->is(TokenKind::CopyData)), $sql);
+    }
+
+    /**
+     * @return list<array{TokenKind, string, ?string}>
+     */
+    private static function copyData(Dialect $dialect, string $sql): array
+    {
+        return self::describe(array_values(array_filter((new Tokenizer($dialect, $sql))->tokenize(), static fn (Token $token): bool => $token->is(TokenKind::CopyData))));
     }
 
     /**

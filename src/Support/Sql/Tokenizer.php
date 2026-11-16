@@ -262,15 +262,8 @@ final class Tokenizer
     private function tokenizeIdentifierOrKeyword(string $firstChars, int $start): Token
     {
         $this->next();
-        $word = $this->tokenizeWord($firstChars);
 
-        if (strspn($word, '0123456789.') === strlen($word)) {
-            $this->takeWhile(static fn (string $ch): bool => $ch === '.' || Character::isAsciiDigit($ch));
-
-            return $this->symbol(TokenKind::Number, $start);
-        }
-
-        return $this->word($word, $start);
+        return $this->word($this->tokenizeWord($firstChars), $start);
     }
 
     private function nextToken(?Token $prev, ?Token $prevNonWhitespace): ?Token
@@ -361,13 +354,6 @@ final class Tokenizer
 
         if ($this->dialect->isDelimitedIdentifierStart($ch)) {
             return $this->word($this->tokenizeQuotedIdentifier($ch), $start, $ch);
-        }
-
-        if ($this->dialect->isNestedDelimitedIdentifierStart($ch)) {
-            $quotes = $this->dialect->peekNestedDelimitedIdentifierQuotes(substr($this->sql, $this->pos, $this->end - $this->pos));
-            if ($quotes !== null) {
-                return $this->tokenizeNestedDelimitedIdentifier($quotes[0], $quotes[1], $start);
-            }
         }
 
         if ($ch === '.' || Character::isAsciiDigit($ch)) {
@@ -464,31 +450,6 @@ final class Tokenizer
         return $this->literal($single, $this->tokenizeSingleQuotedString($quote, $backslashEscape), $start);
     }
 
-    private function tokenizeNestedDelimitedIdentifier(string $quoteStart, ?string $nestedQuoteStart, int $start): Token
-    {
-        if ($nestedQuoteStart === null) {
-            return $this->word($this->tokenizeQuotedIdentifier($quoteStart), $start, $quoteStart);
-        }
-
-        $quoteEnd = self::matchingEndQuote($quoteStart);
-        $nestedQuoteEnd = self::matchingEndQuote($nestedQuoteStart);
-        $errorAt = $this->pos;
-
-        $this->next();
-        $this->takeWhile(Character::isWhitespace(...));
-        if ($this->peek() !== $nestedQuoteStart) {
-            $this->fail("Expected nested delimiter '{$nestedQuoteStart}' before EOF.", $errorAt);
-        }
-        $word = $nestedQuoteStart.$this->tokenizeQuotedIdentifier($nestedQuoteEnd).$nestedQuoteEnd;
-        $this->takeWhile(Character::isWhitespace(...));
-        if ($this->peek() !== $quoteEnd) {
-            $this->fail("Expected close delimiter '{$quoteEnd}' before EOF.", $errorAt);
-        }
-        $this->next();
-
-        return $this->word($word, $start, $quoteStart);
-    }
-
     private function tokenizeNumberOrPeriod(string $ch, ?Token $prev, ?Token $prevNonWhitespace, int $start): Token
     {
         if ($ch === '.' && $this->peekNth(1) === '_') {
@@ -499,17 +460,7 @@ final class Tokenizer
             $this->fail("Unexpected character '_'", $this->pos);
         }
 
-        if ($ch === '.'
-            && $this->dialect->supportsTupleElementAccess()
-            && in_array($prev?->kind, [TokenKind::Word, TokenKind::RParen, TokenKind::RBracket, TokenKind::Number], true)) {
-            return $this->consumeAndReturn(TokenKind::Period, $start);
-        }
-
         $s = $this->tokenizeNumberPart(Character::isAsciiDigit(...));
-
-        if ($s !== '' && $this->dialect->supportsTupleElementAccess() && $prev?->kind === TokenKind::Period) {
-            return $this->symbol(TokenKind::Number, $start);
-        }
 
         if ($s === '0' && $this->dialect->supportsNonDecimalIntegerLiterals()) {
             $radix = match ($this->peek()) {
@@ -633,10 +584,6 @@ final class Tokenizer
 
         if ($next !== null && Character::isWhitespace($next)) {
             return $this->symbol(TokenKind::Mod, $start);
-        }
-
-        if ($next !== null && $this->dialect->isIdentifierStart('%')) {
-            return $this->tokenizeIdentifierOrKeyword('%'.$next, $start);
         }
 
         return $this->startBinop('%', TokenKind::Mod, $start);
@@ -1182,16 +1129,16 @@ final class Tokenizer
         }
 
         return match ($openingQuotes) {
-            1 => $this->literal($single, $this->tokenizeQuotedString($quote, 1, 0, $backslashEscape), $start),
+            1 => $this->literal($single, $this->tokenizeQuotedString($quote, 1, false, $backslashEscape), $start),
             2 => $this->literal($single, '', $start),
-            3 => $this->literal($triple, $this->tokenizeQuotedString($quote, 3, 0, $backslashEscape), $start),
+            3 => $this->literal($triple, $this->tokenizeQuotedString($quote, 3, false, $backslashEscape), $start),
             default => $this->fail('invalid string literal opening', $errorAt),
         };
     }
 
     private function tokenizeSingleQuotedString(string $quote, bool $backslashEscape): string
     {
-        return $this->tokenizeQuotedString($quote, 1, 1, $backslashEscape);
+        return $this->tokenizeQuotedString($quote, 1, true, $backslashEscape);
     }
 
     private function tokenizeQuoteDelimitedString(TokenKind $kind, string $literalPrefix, int $start): Token
@@ -1229,14 +1176,12 @@ final class Tokenizer
      * Quotes and backslashes are ASCII and never part of a multibyte UTF-8 sequence, so the content between them is
      * copied byte-wise.
      */
-    private function tokenizeQuotedString(string $quote, int $numQuoteChars, int $openingQuotesToConsume, bool $backslashEscape): string
+    private function tokenizeQuotedString(string $quote, int $numQuoteChars, bool $consumeOpeningQuote, bool $backslashEscape): string
     {
         $errorAt = $this->pos;
 
-        for ($i = 0; $i < $openingQuotesToConsume; $i++) {
-            if ($this->next() !== $quote) {
-                $this->fail('invalid string literal opening', $errorAt);
-            }
+        if ($consumeOpeningQuote) {
+            $this->next();
         }
 
         $s = '';
@@ -1517,11 +1462,7 @@ final class Tokenizer
     {
         $at = $this->pos;
         for ($i = 0; $i < $n; $i++) {
-            $ch = $this->charAt($at);
-            if ($ch === null) {
-                return null;
-            }
-            $at += strlen($ch);
+            $at += strlen($this->charAt($at) ?? '');
         }
 
         return $this->charAt($at);
