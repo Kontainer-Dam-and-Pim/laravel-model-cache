@@ -1,3 +1,5 @@
+<img src="art/icon.svg" width="96" height="96" alt="" align="right">
+
 # Laravel Model Cache
 
 Automatic Redis query cache for Laravel's query builder and Eloquent, with invalidation that follows writes, transactions, foreign keys, views and triggers.
