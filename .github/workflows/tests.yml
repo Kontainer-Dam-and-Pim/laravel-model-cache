@@ -225,7 +225,14 @@ jobs:
         run: php -d memory_limit=-1 vendor/bin/phpcov merge --clover "$RUNNER_TEMP/clover.xml" "$RUNNER_TEMP/coverage"
 
       - name: Fail on any uncovered line
-        run: php .github/scripts/check-coverage.php "$RUNNER_TEMP/clover.xml"
+        run: php .github/scripts/check-coverage.php --clover="$RUNNER_TEMP/clover.xml" --badge="$RUNNER_TEMP/coverage.json"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage-badge
+          path: ${{ runner.temp }}/coverage.json
+          if-no-files-found: error
+          retention-days: 7
 
   benchmark:
     name: Benchmark on ${{ matrix.database }} with ${{ matrix.redis-client }}
@@ -287,7 +294,7 @@ jobs:
         run: shellcheck .github/scripts/*.sh
 
   report:
-    needs: [compatibility, suites, benchmark, quality]
+    needs: [compatibility, suites, coverage-gate, benchmark, quality]
     if: always()
     runs-on: ubuntu-latest
     permissions:
@@ -307,6 +314,12 @@ jobs:
           path: ${{ runner.temp }}/results
           merge-multiple: true
 
+      - uses: actions/download-artifact@v8
+        if: needs.coverage-gate.result == 'success'
+        with:
+          name: coverage-badge
+          path: .github/badges
+
       - name: Render report
         run: php .github/scripts/render-report.php --results="$RUNNER_TEMP/results" --run-url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
 
@@ -316,16 +329,18 @@ jobs:
           && github.ref == 'refs/heads/master'
           && needs.compatibility.result == 'success'
           && needs.suites.result == 'success'
+          && needs.coverage-gate.result == 'success'
           && needs.benchmark.result == 'success'
           && needs.quality.result == 'success'
         run: |
-          php .github/scripts/render-report.php --results="$RUNNER_TEMP/results" --run-url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --readme=README.md > /dev/null
-          if git diff --quiet -- README.md; then
-            echo "README already up to date"
+          php .github/scripts/render-report.php --results="$RUNNER_TEMP/results" --run-url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --readme=README.md --art=art > /dev/null
+          generated=(README.md art/benchmarks-light.svg art/benchmarks-dark.svg .github/badges/coverage.json)
+          if git diff --quiet -- "${generated[@]}"; then
+            echo "README, charts and badges already up to date"
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Update the generated compatibility matrix and benchmarks' -- README.md
+          git commit -m 'Update the generated compatibility matrix, benchmarks and coverage badge' -- "${generated[@]}"
           git pull --rebase origin master
           git push origin HEAD:master

@@ -30,7 +30,8 @@ function ranges(array $lines): string
     return implode(', ', $ranges);
 }
 
-$clover = $argv[1] ?? fail('usage: check-coverage.php <clover.xml>');
+$options = getopt('', ['clover:', 'badge:']);
+$clover = (string) ($options['clover'] ?? fail('usage: check-coverage.php --clover=<clover.xml> [--badge=<shields endpoint json>]'));
 $root = realpath(__DIR__.'/../..').'/';
 $document = simplexml_load_file($clover) ?: fail("Could not read the Clover report {$clover}");
 
@@ -68,6 +69,22 @@ foreach ($uncovered as $path => $lines) {
     echo "{$path}: ".ranges($lines).PHP_EOL;
 }
 
-printf('Line coverage: %d of %d statements (%.2f%%)%s', $statements - $missed, $statements, 100 * ($statements - $missed) / $statements, PHP_EOL);
+$percentage = 100 * ($statements - $missed) / $statements;
+printf('Line coverage: %d of %d statements (%.2f%%)%s', $statements - $missed, $statements, $percentage, PHP_EOL);
+
+if (isset($options['badge'])) {
+    $badge = (string) $options['badge'];
+    $temporary = $badge.'.tmp';
+    $json = json_encode([
+        'schemaVersion' => 1,
+        'label' => 'coverage',
+        'message' => $missed === 0 ? '100%' : sprintf('%.2f%%', floor($percentage * 100) / 100),
+        'color' => $missed === 0 ? 'brightgreen' : 'red',
+    ], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+    if (file_put_contents($temporary, $json.PHP_EOL) === false || ! rename($temporary, $badge)) {
+        fail("Could not write the coverage badge {$badge}");
+    }
+}
 
 exit($missed === 0 ? 0 : 1);

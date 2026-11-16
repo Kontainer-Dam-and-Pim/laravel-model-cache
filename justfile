@@ -107,11 +107,18 @@ coverage: deps services
     for pid in "${pids[@]}"; do wait "$pid" || status=1; done
     [ "$status" -eq 0 ]
     php -d memory_limit=-1 vendor/bin/phpcov merge --clover "$out/clover.xml" "$out" > /dev/null
-    php .github/scripts/check-coverage.php "$out/clover.xml"
+    php .github/scripts/check-coverage.php --clover="$out/clover.xml"
 
 # Report cached versus uncached read throughput and what a cached read costs in Redis commands.
 bench: deps services
     {{run_db}} DB_CONNECTION=mysql DB_PORT={{mysql_port}} {{phpunit}} tests/Benchmark
+
+# Render the README banners from art/icon.svg, with the title and tagline in Inter as outlines.
+art:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    font="$(nix build --no-link --print-out-paths nixpkgs#inter)/share/fonts/truetype/InterVariable.ttf"
+    nix shell --impure --expr 'with import (builtins.getFlake "nixpkgs") {}; python3.withPackages (p: [p.fonttools])' --command python3 -I art/render-banner.py "$font"
 
 # Run the code formatter, which rewrites files.
 format:
