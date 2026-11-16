@@ -206,18 +206,33 @@ An invalid value, such as an unknown `scope` or a negative `expiration_time`, di
 **No stale reads after a write.** Every tag has a random version token. A read captures its tags' tokens before querying the database and stores the result under their fingerprint. A write replaces the tokens of the tags it affects. A result read before a concurrent write therefore becomes unreachable rather than stale. Lookups, stores and invalidations are each a single atomic Lua script.
 
 ```mermaid
+%%{init: {"sequence": {"mirrorActors": false}}}%%
 sequenceDiagram
-    participant Read
-    participant Redis
-    participant Database
-    participant Write
-    Read->>Redis: Look up the query
-    Redis-->>Read: Miss, with the tag tokens t1
-    Read->>Database: Run the query
-    Write->>Database: Update a row the query read
-    Write->>Redis: Replace token t1 with t2
-    Read->>Redis: Store the result under fingerprint(t1)
-    Note over Redis: Later lookups compute fingerprint(t2),<br/>so the result stored under t1 is never served
+    autonumber
+    participant A as Read in worker A
+    participant R as Redis
+    participant D as Database
+    participant B as Write in worker B
+
+    Note over R: Tag cars:12 holds token t1
+    rect rgba(255, 45, 32, 0.08)
+        A->>R: Look up the query
+        R-->>A: Miss, cars:12 is at t1
+        A->>D: SELECT * FROM cars WHERE id = 12
+        B->>D: UPDATE cars SET name = 'Ada' WHERE id = 12
+        B->>R: Invalidate cars:12
+        Note over R: cars:12 now holds t2
+        D-->>A: The row as it was before the update
+        A->>R: Store it under fingerprint(t1)
+    end
+    rect rgba(27, 175, 122, 0.10)
+        A->>R: Look up the query again
+        R-->>A: Miss, nothing under fingerprint(t2)
+        A->>D: SELECT * FROM cars WHERE id = 12
+        D-->>A: The updated row
+        A->>R: Store it under fingerprint(t2)
+    end
+    Note over A,B: Nothing looks up fingerprint(t1) again, so the stale row is never served and expires
 ```
 
 **Schema changes retire the whole cache.** Entries live under a random generation id. These replace the id for every host sharing the Redis database in one atomic step:
