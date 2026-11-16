@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## [Unreleased]
+### Removed
+- `model-cache:enable` and `model-cache:disable`. They rewrote `active` in `config/model-cache.php` on the host they ran on only, so other hosts kept serving entries that host no longer invalidated, the edit did nothing under `config:cache`, and it replaced `env('MODEL_CACHE_ACTIVE', true)` with a literal. Set `MODEL_CACHE_ACTIVE` on every host instead, and run `model-cache:flush` after re-enabling, as [Operating it](README.md#operating-it) describes
+
 ## [1.0.0] - 2026-11-16
 ### Added
 - `model-cache.metrics` (`MODEL_CACHE_METRICS`, off by default) counts hits, misses, stores, invalidations and their cascade reach per table, retires, bypasses and failures by reason, and the statements that run uncached or retire the cache, inside the Redis calls Model Cache already makes; `php artisan model-cache:stats [--hours] [--table] [--json]` reports them. With metrics off the scripts and their arguments are unchanged

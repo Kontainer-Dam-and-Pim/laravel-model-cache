@@ -23,8 +23,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
-use Kontainer\ModelCache\Console\DisableCommand;
-use Kontainer\ModelCache\Console\EnableCommand;
 use Kontainer\ModelCache\Console\FlushCommand;
 use Kontainer\ModelCache\Console\InvalidateCommand;
 use Kontainer\ModelCache\Console\StatsCommand;
@@ -58,6 +56,8 @@ final class ModelCacheServiceProvider extends ServiceProvider
 {
     public const CONFIG_FILE = 'model-cache.php';
 
+    public const string CONFIG_SOURCE = __DIR__.'/../config/'.self::CONFIG_FILE;
+
     private const array SINGLETONS = [Services::REDIS, Services::METRICS, Services::CACHE, Services::HANDLER];
 
     private const array CACHING_CONNECTIONS = [
@@ -71,7 +71,7 @@ final class ModelCacheServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->publishes([
-            __DIR__.'/../config/'.self::CONFIG_FILE => config_path(self::CONFIG_FILE),
+            self::CONFIG_SOURCE => config_path(self::CONFIG_FILE),
         ], 'config');
 
         // Propagate withoutCache() from the Eloquent builder to the underlying caching query builder.
@@ -142,10 +142,7 @@ final class ModelCacheServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->mergeConfigFrom(
-            __DIR__.'/../config/'.self::CONFIG_FILE,
-            'model-cache'
-        );
+        $this->mergeConfigFrom(self::CONFIG_SOURCE, 'model-cache');
 
         // Only register when active to avoid bootstrap overhead when disabled
         if ((bool) config('model-cache.active', true) && $this->hasValidConfiguration()) {
@@ -193,16 +190,6 @@ final class ModelCacheServiceProvider extends ServiceProvider
 
             return false;
         }
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * @return list<string>
-     */
-    public function provides(): array
-    {
-        return self::SINGLETONS;
     }
 
     private function registerSingletons(): void
@@ -273,15 +260,11 @@ final class ModelCacheServiceProvider extends ServiceProvider
     private function registerCommands(): void
     {
         $this->app->singleton('command.model-cache.flush', static fn () => new FlushCommand);
-        $this->app->singleton('command.model-cache.enable', static fn () => new EnableCommand);
-        $this->app->singleton('command.model-cache.disable', static fn () => new DisableCommand);
         $this->app->singleton('command.model-cache.invalidate', static fn () => new InvalidateCommand);
         $this->app->singleton('command.model-cache.stats', static fn () => new StatsCommand);
 
         $this->commands([
             'command.model-cache.flush',
-            'command.model-cache.enable',
-            'command.model-cache.disable',
             'command.model-cache.invalidate',
             'command.model-cache.stats',
         ]);

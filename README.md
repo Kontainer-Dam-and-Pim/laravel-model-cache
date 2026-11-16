@@ -286,8 +286,6 @@ Reads are assumed to have no side effects. Use `withoutCache()` for queries that
 | `model-cache:flush` | Retires every entry in one Redis command, then deletes leftover keys in `SCAN` batches (about 1 s per million keys). |
 | `model-cache:invalidate <tables>... [--connection=]` | Invalidates the given tables and everything the database changes along with them. |
 | `model-cache:stats [--hours=24] [--table=] [--json]` | Reports collected metrics. |
-| `model-cache:disable` | Sets `active` to `false` in `config/model-cache.php` and clears the config cache. |
-| `model-cache:enable` | Sets `active` to `true`, and retires entries cached before the cache was disabled. |
 
 ## Metrics
 
@@ -374,7 +372,8 @@ Compared with Lada Cache 6.x:
    | `Spiritix\LadaCache\Database\LadaCacheTrait` | `Kontainer\ModelCache\Database\ModelCacheTrait` |
    | `config/lada-cache.php` | `config/model-cache.php` |
    | `LADA_CACHE_*` environment variables | `MODEL_CACHE_*`, with the same suffixes |
-   | `lada-cache:flush`, `:enable`, `:disable` | `model-cache:flush`, `:enable`, `:disable` |
+   | `lada-cache:flush` | `model-cache:flush` |
+   | `lada-cache:enable`, `lada-cache:disable` | `MODEL_CACHE_ACTIVE`, set on every host at once |
 
 4. Review the defaults that differ: `prefix` is `model-cache:` instead of `lada:`, and `expiration_time` is 7 days instead of never.
 5. Give the cache a Redis connection with short timeouts, as shown under [Installation](#installation).
@@ -382,7 +381,7 @@ Compared with Lada Cache 6.x:
 
 ## Development
 
-The Nix flake provides PHP 8.4 with the required extensions, Composer and `just`. The databases run in containers on ports 13306 (MySQL), 13307 (MariaDB), 15432 (PostgreSQL) and 16379 (Redis).
+The Nix flake provides PHP 8.4 with the required extensions, Composer and `just`. The databases run in containers on ports 13306 (MySQL), 13307 (MariaDB), 15432 (PostgreSQL) and 16379 (Redis). The databases keep their data in memory without syncing it to disk, since every test recreates its schema, so their contents are gone when the containers stop.
 
 ```bash
 nix develop                     # or: direnv allow
@@ -392,6 +391,7 @@ just test-matrix                # every database with phpredis and Predis
 just test --filter=RowKeysTest
 just fuzz                       # MODEL_CACHE_FUZZ_ITERATIONS, MODEL_CACHE_FUZZ_SEED
 just concurrency                # forked workers sharing one database and Redis
+just coverage                   # Unit and Integration on every database, fails below 100% line coverage
 just bench
 just format                     # Pint
 just lint analyse               # Pint check and PHPStan
@@ -404,6 +404,8 @@ just lint analyse               # Pint check and PHPStan
 | Fuzz        | Seeded random workloads, comparing every cached read with the uncached query |
 | Concurrency | Parallel processes, checking cached reads against the database afterwards |
 | Benchmark   | Throughput with and without the cache, and Redis commands per cached read |
+
+CI fails unless the Unit and Integration suites, run on every database and with both Redis clients, together cover every line of `src`.
 
 ## License
 
