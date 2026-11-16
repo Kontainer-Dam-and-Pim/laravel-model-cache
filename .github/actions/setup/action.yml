@@ -8,6 +8,9 @@ inputs:
   dependencies:
     description: locked installs composer.lock, lowest and highest resolve every dependency to its oldest or newest allowed version
     default: locked
+  coverage:
+    description: Coverage driver for setup-php, none or pcov
+    default: none
 
 runs:
   using: composite
@@ -18,7 +21,7 @@ runs:
         php-version: ${{ inputs.php }}
         extensions: redis, apcu, pcntl, pdo_mysql, pdo_pgsql, pdo_sqlite
         ini-values: apc.enable_cli=1
-        coverage: none
+        coverage: ${{ inputs.coverage }}
         tools: composer
 
     - name: Cache Composer downloads

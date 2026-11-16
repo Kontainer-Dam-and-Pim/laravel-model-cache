@@ -13,6 +13,7 @@
           ++ (with all; [
             apcu
             pcntl
+            pcov
             pdo_mysql
             pdo_pgsql
             pdo_sqlite

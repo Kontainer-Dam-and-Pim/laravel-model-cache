@@ -86,6 +86,11 @@ jobs:
           php: ${{ matrix.php }}
           dependencies: ${{ matrix.dependencies }}
 
+      - uses: ./.github/actions/disposable-database
+        with:
+          database: ${{ matrix.database }}
+          container: ${{ matrix.database != 'sqlite' && job.services[matrix.database].id || '' }}
+
       - name: Run Unit and Integration suites
         id: suite
         run: vendor/bin/phpunit --no-coverage --testsuite "$SUITE"
@@ -137,6 +142,11 @@ jobs:
         with:
           php: '8.4'
 
+      - uses: ./.github/actions/disposable-database
+        with:
+          database: ${{ matrix.database }}
+          container: ${{ matrix.database != 'sqlite' && job.services[matrix.database].id || '' }}
+
       - name: Run ${{ matrix.suite }} suite
         id: suite
         run: vendor/bin/phpunit --no-coverage --testsuite "$SUITE"
@@ -149,6 +159,73 @@ jobs:
           name: suite-${{ matrix.suite }}-${{ matrix.database }}-${{ matrix.redis-client }}
           database-container: ${{ job.services[matrix.database].id }}
           redis-container: ${{ job.services.redis.id }}
+
+  coverage:
+    name: Coverage on ${{ matrix.database }} with ${{ matrix.redis-client }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services: *services
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { database: sqlite, redis-client: phpredis }
+          - { database: mysql, redis-client: phpredis }
+          - { database: mariadb, redis-client: phpredis }
+          - { database: pgsql, redis-client: phpredis }
+          - { database: sqlite, redis-client: predis }
+
+    env:
+      DB_CONNECTION: ${{ matrix.database }}
+      REDIS_CLIENT: ${{ matrix.redis-client }}
+      COVERAGE_FILE: ${{ github.workspace }}/coverage-${{ matrix.database }}-${{ matrix.redis-client }}.cov
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+        with:
+          php: '8.4'
+          coverage: pcov
+
+      - uses: ./.github/actions/disposable-database
+        with:
+          database: ${{ matrix.database }}
+          container: ${{ matrix.database != 'sqlite' && job.services[matrix.database].id || '' }}
+
+      - name: Run Unit and Integration suites with coverage
+        run: vendor/bin/phpunit --testsuite Unit,Integration --coverage-php "$COVERAGE_FILE"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage-${{ matrix.database }}-${{ matrix.redis-client }}
+          path: ${{ env.COVERAGE_FILE }}
+          retention-days: 1
+
+  coverage-gate:
+    name: Line coverage is 100%
+    needs: coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+        with:
+          php: '8.4'
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-*
+          path: ${{ runner.temp }}/coverage
+          merge-multiple: true
+
+      - name: Merge coverage of every database and Redis client
+        run: php -d memory_limit=-1 vendor/bin/phpcov merge --clover "$RUNNER_TEMP/clover.xml" "$RUNNER_TEMP/coverage"
+
+      - name: Fail on any uncovered line
+        run: php .github/scripts/check-coverage.php "$RUNNER_TEMP/clover.xml"
 
   benchmark:
     name: Benchmark on ${{ matrix.database }} with ${{ matrix.redis-client }}

@@ -79,6 +79,36 @@ concurrency *args: deps services
         done
     done
 
+# Measure line coverage of the Unit and Integration suites over every database, and Predis on SQLite, and fail below 100%.
+coverage: deps services
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="$(mktemp -d)"
+    trap 'rm -rf "$out"' EXIT
+    run() {
+        local driver="$1" port="$2" client="$3" redis_db="$4"
+        if DB_HOST=127.0.0.1 DB_CONNECTION="$driver" DB_PORT="$port" REDIS_HOST=127.0.0.1 REDIS_PORT={{redis_port}} \
+            REDIS_CLIENT="$client" REDIS_DB="$redis_db" REDIS_CACHE_DB="$((redis_db + 1))" \
+            vendor/bin/phpunit --do-not-cache-result --testsuite Unit,Integration --coverage-php "$out/$driver-$client.cov" > "$out/$driver-$client.log" 2>&1; then
+            echo "== $driver / $client passed"
+        else
+            cat "$out/$driver-$client.log"
+            echo "== $driver / $client failed"
+            return 1
+        fi
+    }
+    pids=()
+    run sqlite '' phpredis 2 & pids+=("$!")
+    run mysql {{mysql_port}} phpredis 4 & pids+=("$!")
+    run mariadb {{mariadb_port}} phpredis 6 & pids+=("$!")
+    run pgsql {{pgsql_port}} phpredis 8 & pids+=("$!")
+    run sqlite '' predis 10 & pids+=("$!")
+    status=0
+    for pid in "${pids[@]}"; do wait "$pid" || status=1; done
+    [ "$status" -eq 0 ]
+    php -d memory_limit=-1 vendor/bin/phpcov merge --clover "$out/clover.xml" "$out" > /dev/null
+    php .github/scripts/check-coverage.php "$out/clover.xml"
+
 # Report cached versus uncached read throughput and what a cached read costs in Redis commands.
 bench: deps services
     {{run_db}} DB_CONNECTION=mysql DB_PORT={{mysql_port}} {{phpunit}} tests/Benchmark
