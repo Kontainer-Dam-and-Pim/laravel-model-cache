@@ -1,6 +1,7 @@
 services:
   redis:
     image: redis:7-alpine
+    command: redis-server --databases 64
     ports:
       - "16379:6379"
     healthcheck:
@@ -13,13 +14,16 @@ services:
 
   mysql:
     image: mysql:8.4
+    command: --innodb-flush-log-at-trx-commit=0 --innodb-doublewrite=OFF --skip-log-bin --sync-binlog=0
+    tmpfs:
+      - /var/lib/mysql
     ports:
       - "13306:3306"
     environment:
       MYSQL_DATABASE: test
       MYSQL_ROOT_PASSWORD: secret
     healthcheck:
-      test: ["CMD-SHELL", "mysql -uroot -psecret -e 'select 1' test"]
+      test: ["CMD-SHELL", "mysql -h127.0.0.1 -uroot -psecret -e 'select 1' test"]
       interval: 2s
       timeout: 5s
       retries: 60
@@ -28,6 +32,9 @@ services:
 
   mariadb:
     image: mariadb:11.4
+    command: --innodb-flush-log-at-trx-commit=0 --innodb-doublewrite=OFF --skip-log-bin --sync-binlog=0
+    tmpfs:
+      - /var/lib/mysql
     ports:
       - "13307:3306"
     environment:
@@ -43,6 +50,9 @@ services:
 
   postgres:
     image: postgres:17-alpine
+    command: -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+    tmpfs:
+      - /var/lib/postgresql/data
     ports:
       - "15432:5432"
     environment:

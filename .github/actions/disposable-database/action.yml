@@ -1,0 +1,28 @@
+name: Make the test database disposable
+description: Turns off durability on the job's database, since every test recreates its schema and nothing must survive a crash
+
+inputs:
+  database:
+    description: sqlite, mysql, mariadb or pgsql
+    required: true
+  container:
+    description: Id of the database service container; empty for SQLite
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Turn off durability on ${{ inputs.database }}
+      shell: bash
+      env:
+        DATABASE: ${{ inputs.database }}
+        CONTAINER: ${{ inputs.container }}
+      run: |
+        set -euo pipefail
+        case "$DATABASE" in
+          sqlite) ;;
+          mysql) docker exec "$CONTAINER" mysql -uroot -psecret -e 'SET PERSIST innodb_flush_log_at_trx_commit = 0; SET PERSIST sync_binlog = 0' ;;
+          mariadb) docker exec "$CONTAINER" mariadb -uroot -psecret -e 'SET GLOBAL innodb_flush_log_at_trx_commit = 0; SET GLOBAL sync_binlog = 0' ;;
+          pgsql) docker exec "$CONTAINER" psql -U postgres -d test -c 'ALTER SYSTEM SET fsync = off' -c 'ALTER SYSTEM SET synchronous_commit = off' -c 'ALTER SYSTEM SET full_page_writes = off' -c 'SELECT pg_reload_conf()' ;;
+          *) echo "Unknown database $DATABASE" >&2; exit 1 ;;
+        esac
