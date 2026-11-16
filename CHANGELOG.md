@@ -1,6 +1,12 @@
 # CHANGELOG
 
-## [Unreleased]
+## [1.0.1] - 2026-11-16
+### Fixed
+- Raw multi-table `DELETE ... USING` on SQLite and reads with `CONNECT BY`/`START WITH` on SQL Server failed to parse, so they retired the whole cache or ran uncached; they are now parsed as sqlparser-rs parses them
+
+### Changed
+- A Redis connection whose phpredis client is a `RedisCluster` is rejected with an error instead of being used, since Redis Cluster is not supported
+
 ### Removed
 - `model-cache:enable` and `model-cache:disable`. They rewrote `active` in `config/model-cache.php` on the host they ran on only, so other hosts kept serving entries that host no longer invalidated, the edit did nothing under `config:cache`, and it replaced `env('MODEL_CACHE_ACTIVE', true)` with a literal. Set `MODEL_CACHE_ACTIVE` on every host instead, and run `model-cache:flush` after re-enabling, as [Operating it](README.md#operating-it) describes
 
