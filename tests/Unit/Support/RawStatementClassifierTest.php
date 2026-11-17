@@ -157,11 +157,11 @@ final class RawStatementClassifierTest extends TestCase
     {
         yield 'insert' => ['insert into cars (name) values (?)', ['cars'], Write::insert(), 'mysql'];
         yield 'insert naming update in a literal' => ["insert into cars (name) values ('update')", ['cars'], Write::insert(), 'mysql'];
-        yield 'insert on duplicate key update' => ['INSERT INTO cars (id) SELECT id FROM drivers ON DUPLICATE KEY UPDATE name = ?, `cars`.`driver_id` = VALUES(driver_id)', ['cars'], Write::update(['name', 'driver_id']), 'mysql'];
-        yield 'insert on conflict do update' => ['insert into cars (id) values (1) on conflict (id) do update set name = excluded.name', ['cars'], Write::update(['name']), 'pgsql'];
+        yield 'insert on duplicate key update' => ['INSERT INTO cars (id) SELECT id FROM drivers ON DUPLICATE KEY UPDATE name = ?, `cars`.`driver_id` = VALUES(driver_id)', ['cars'], Write::upsert(['name', 'driver_id']), 'mysql'];
+        yield 'insert on conflict do update' => ['insert into cars (id) values (1) on conflict (id) do update set name = excluded.name', ['cars'], Write::upsert(['name']), 'pgsql'];
         yield 'insert on conflict do nothing' => ['insert into cars (id) values (1) on conflict do nothing', ['cars'], Write::insert(), 'pgsql'];
-        yield 'insert or replace' => ['insert or replace into cars (id) values (?)', ['cars'], Write::delete(), 'sqlite'];
-        yield 'replace' => ['replace into cars (id) values (?)', ['cars'], Write::delete(), 'mysql'];
+        yield 'insert or replace' => ['insert or replace into cars (id) values (?)', ['cars'], Write::replace(), 'sqlite'];
+        yield 'replace' => ['replace into cars (id) values (?)', ['cars'], Write::replace(), 'mysql'];
         yield 'update' => ['update cars set name = ?, driver_id = driver_id + 1', ['cars'], Write::update(['name', 'driver_id']), 'mysql'];
         yield 'update of a tuple' => ['update cars set (name, driver_id) = (select name, id from drivers limit 1)', ['cars'], Write::update(['name', 'driver_id']), 'pgsql'];
         yield 'delete' => ['delete from cars where id = ?', ['cars'], Write::delete(), 'mysql'];

@@ -473,7 +473,11 @@ final class DependentTables
 
         foreach (WriteTargets::of($statement) as $name) {
             $table = TableName::tagged($name[array_key_last($name)], $prefix);
-            $columns = $statement instanceof InsertStatement || $statement instanceof UpdateStatement ? WriteTargets::assignedColumns($statement) ?? [] : [];
+            $columns = match (true) {
+                $statement instanceof InsertStatement => WriteTargets::conflictColumns($statement) ?? [],
+                $statement instanceof UpdateStatement => WriteTargets::assignedColumns($statement),
+                default => [],
+            };
             $updates = array_map(static fn (string $column): array => ['update', $table, Write::columnName($column)], $columns);
 
             array_push($changes, ...match (true) {
