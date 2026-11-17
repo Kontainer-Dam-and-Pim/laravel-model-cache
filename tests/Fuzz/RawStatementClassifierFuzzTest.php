@@ -6,7 +6,7 @@ namespace Kontainer\ModelCache\Tests\Fuzz;
 
 use Kontainer\ModelCache\Support\RawStatementClassifier;
 use Kontainer\ModelCache\Support\Sql\Dialects;
-use Kontainer\ModelCache\Tests\Fuzz\Support\Workload;
+use Kontainer\ModelCache\Tests\Fuzz\Support\FuzzEnvironment;
 use PHPUnit\Framework\TestCase;
 use Random\Engine\Mt19937;
 use Random\Randomizer;
@@ -26,9 +26,9 @@ final class RawStatementClassifierFuzzTest extends TestCase
 
     public function testWritesAreNeverMissedOrAttributedToAnotherTable(): void
     {
-        $seed = Workload::seedFromEnvironment();
+        $seed = FuzzEnvironment::seed();
         $this->random = new Randomizer(new Mt19937($seed));
-        $iterations = Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS);
+        $iterations = FuzzEnvironment::iterations(self::DEFAULT_ITERATIONS);
 
         for ($iteration = 0; $iteration < $iterations; $iteration++) {
             $table = $this->pick(self::TABLES);
