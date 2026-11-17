@@ -13,17 +13,24 @@ enum ValueKind: string
 {
     case Integer = 'int';
     case Text = 'text';
+    case Timestamp = 'timestamp';
 
     private const array INTEGERS = [1, 2, 3, 4, 5, 6];
 
     private const array TEXTS = ['k1', 'K1', 'k2', 'k3', 'K3', 'k4', 'k5', 'k6'];
+
+    private const array TIMESTAMPS = ['2026-01-01 00:00:00', '2026-06-01 12:30:00'];
 
     /**
      * @return list<int|string>
      */
     public function domain(): array
     {
-        return $this === self::Integer ? self::INTEGERS : self::TEXTS;
+        return match ($this) {
+            self::Integer => self::INTEGERS,
+            self::Text => self::TEXTS,
+            self::Timestamp => self::TIMESTAMPS,
+        };
     }
 
     /**

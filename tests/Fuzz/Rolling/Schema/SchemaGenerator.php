@@ -17,6 +17,8 @@ final readonly class SchemaGenerator
 {
     public const string AUDIT = 'audit';
 
+    public const string DELETED_AT = 'deleted_at';
+
     public function __construct(
         private Dice $dice,
         private Driver $driver,
@@ -59,7 +61,7 @@ final readonly class SchemaGenerator
     public function expand(Schema $schema): Schema
     {
         foreach (range(1, $this->dice->int(1, 3)) as $_) {
-            $schema = match ($this->dice->weighted(['table' => 2, 'column' => 3, 'unique' => 2, 'key' => 3, 'rules' => 2, 'view' => 2, 'trigger' => 2])) {
+            $schema = match ($this->dice->weighted(['table' => 2, 'column' => 3, 'unique' => 2, 'key' => 3, 'rules' => 2, 'view' => 2, 'trigger' => 2, 'softDeletes' => 2])) {
                 'table' => $this->withForeignKey($schema->withTable($table = $this->table($this->nextName('t', array_keys($schema->tables)))), $table->name, false),
                 'column' => $this->withColumn($schema),
                 'unique' => $this->withUniqueColumn($schema),
@@ -67,6 +69,7 @@ final readonly class SchemaGenerator
                 'rules' => $this->withChangedRules($schema),
                 'view' => $this->withView($schema),
                 'trigger' => $this->withTrigger($schema),
+                'softDeletes' => $this->withSoftDeletes($schema),
             };
         }
 
@@ -188,7 +191,17 @@ final readonly class SchemaGenerator
         $table = $this->dice->pick($this->dataTables($schema));
         $name = $this->nextName('x', $table->columnNames());
 
-        return $schema->withTable($table->withColumn(new Column($name, $this->dice->pick(ValueKind::cases()), true)));
+        return $schema->withTable($table->withColumn(new Column($name, $this->dice->pick([ValueKind::Integer, ValueKind::Text]), true)));
+    }
+
+    /**
+     * Adds the column soft deletes mark rows deleted in, which the next release's model uses.
+     */
+    private function withSoftDeletes(Schema $schema): Schema
+    {
+        $candidates = array_values(array_filter($this->dataTables($schema), static fn (Table $table): bool => ! $table->hasColumn(self::DELETED_AT)));
+
+        return $candidates === [] ? $this->withColumn($schema) : $schema->withTable($this->dice->pick($candidates)->withColumn(new Column(self::DELETED_AT, ValueKind::Timestamp, true)));
     }
 
     /**

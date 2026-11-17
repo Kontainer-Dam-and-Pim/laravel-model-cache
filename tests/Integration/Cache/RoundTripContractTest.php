@@ -102,6 +102,7 @@ final class RoundTripContractTest extends TestCase
                 ReadShape::EagerLoad => new Read(Api::Model, 'children', [], shape: $shape, subject: 'parentOf'.self::KEY),
                 ReadShape::WithCount => new Read(Api::Model, 'parents', [], shape: $shape, subject: 'childrenOf'.self::KEY),
                 ReadShape::WhereHas => new Read(Api::Model, 'children', [], shape: $shape, subject: 'parentOf'.self::KEY, label: 'a'),
+                ReadShape::WithTrashed, ReadShape::OnlyTrashed => new Read(Api::Model, 'children', [], shape: $shape),
             };
         }
 
@@ -121,7 +122,7 @@ final class RoundTripContractTest extends TestCase
             [
                 SchemaGenerator::AUDIT => new Table(SchemaGenerator::AUDIT, [new Column('id', ValueKind::Integer, false), new Column('note', ValueKind::Text, false, 'a'), new Column('ref', ValueKind::Integer, true)], ['id'], true),
                 'parents' => $table('parents', new Column('ref', ValueKind::Text, true)),
-                'children' => $table('children', new Column(self::KEY.'_id', ValueKind::Integer, true)),
+                'children' => $table('children', new Column(self::KEY.'_id', ValueKind::Integer, true), new Column(SchemaGenerator::DELETED_AT, ValueKind::Timestamp, true)),
             ],
             [self::KEY => new ForeignKey(self::KEY, 'children', [self::KEY.'_id'], 'parents', ['id'], Rule::Cascade, Rule::SetNull)],
             ['labels' => new View('labels', ViewKind::Projection, 'parents', ['id', 'label'])],
@@ -131,7 +132,7 @@ final class RoundTripContractTest extends TestCase
         return new Release(0, $schema, [
             SchemaGenerator::AUDIT => $model(SchemaGenerator::AUDIT),
             'parents' => $model('parents', new Relation('childrenOf'.self::KEY, RelationKind::HasMany, 'children', self::KEY.'_id', 'id')),
-            'children' => $model('children', new Relation('parentOf'.self::KEY, RelationKind::BelongsTo, 'parents', self::KEY.'_id', 'id')),
+            'children' => new ModelDefinition('children', 'id', ValueKind::Integer, true, [new Relation('parentOf'.self::KEY, RelationKind::BelongsTo, 'parents', self::KEY.'_id', 'id')], true),
         ], []);
     }
 

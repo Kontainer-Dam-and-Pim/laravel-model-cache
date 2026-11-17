@@ -157,6 +157,8 @@ final readonly class Interpreter
             ReadShape::EagerLoad => $query->with([$relation => static fn (Relation $related) => $cached ? $related : $related->withoutCache()]),
             ReadShape::WithCount => $query->withCount($relation),
             ReadShape::WhereHas => $query->whereHas($relation, static fn (EloquentBuilder $related) => $related->where('label', $read->label)),
+            ReadShape::WithTrashed => $query->withTrashed(),
+            ReadShape::OnlyTrashed => $query->onlyTrashed(),
             default => null,
         };
 
@@ -268,6 +270,8 @@ final readonly class Interpreter
             WriteKind::Truncate => $query->truncate(),
             WriteKind::Save => self::model($query->first())?->fill($write->values())->save(),
             WriteKind::DeleteModel => self::model($query->first())?->delete(),
+            WriteKind::Restore => $query->onlyTrashed()->restore(),
+            WriteKind::ForceDelete => $query->withTrashed()->forceDelete(),
             WriteKind::InsertUsing => $this->insertUsing($write, $table),
             WriteKind::UpdateOrInsert => $query->updateOrInsert(self::attributes($write->conditions), $write->values()),
             WriteKind::UpdateJoined => $this->joinParent($query, $write)->update(array_combine(
@@ -485,7 +489,11 @@ final readonly class Interpreter
         $columns = array_keys($row);
         $key = $table->primaryKey[0];
         [$target, $source] = [$sql->alias('t'), $sql->alias('s')];
-        $casts = implode(', ', array_map(static fn (string $column): string => 'cast(? as '.($table->column($column)->kind === ValueKind::Integer ? 'bigint' : 'varchar').')', $columns));
+        $casts = implode(', ', array_map(static fn (string $column): string => 'cast(? as '.match ($table->column($column)->kind) {
+            ValueKind::Integer => 'bigint',
+            ValueKind::Text => 'varchar',
+            ValueKind::Timestamp => 'timestamp',
+        }.')', $columns));
         $updated = array_values(array_intersect(['label', 'amount'], $columns));
         $matched = $updated === []
             ? 'do nothing'

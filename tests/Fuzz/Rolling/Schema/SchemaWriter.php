@@ -167,7 +167,11 @@ final readonly class SchemaWriter
             return;
         }
 
-        $definition = $column->kind === ValueKind::Integer ? $blueprint->unsignedBigInteger($column->name) : $blueprint->string($column->name, 32);
+        $definition = match ($column->kind) {
+            ValueKind::Integer => $blueprint->unsignedBigInteger($column->name),
+            ValueKind::Text => $blueprint->string($column->name, 32),
+            ValueKind::Timestamp => $blueprint->timestamp($column->name),
+        };
         $definition->nullable($column->nullable);
 
         if ($column->default !== null) {

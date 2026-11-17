@@ -42,10 +42,11 @@ final class ModelSource
         }
 
         return sprintf(
-            "final class %s extends \\Illuminate\\Database\\Eloquent\\Model\n{\n    use \\Kontainer\\ModelCache\\Database\\ModelCacheTrait;\n\n"
+            "final class %s extends \\Illuminate\\Database\\Eloquent\\Model\n{\n    use \\Kontainer\\ModelCache\\Database\\ModelCacheTrait;\n%s\n"
             ."    public \$timestamps = false;\n\n    public \$incrementing = %s;\n\n    protected \$guarded = [];\n\n"
             ."    protected \$table = %s;\n\n    protected \$primaryKey = %s;\n\n    protected \$keyType = %s;\n\n%s}\n",
             ModelDefinition::classBaseName($model->table),
+            $model->softDeletes ? "    use \\Illuminate\\Database\\Eloquent\\SoftDeletes;\n" : '',
             $model->incrementing ? 'true' : 'false',
             var_export($model->table, true),
             var_export($model->keyName, true),

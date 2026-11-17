@@ -21,6 +21,12 @@ enum WriteKind: string
     /** A model found by the conditions and deleted. */
     case DeleteModel = 'deleteModel';
 
+    /** Restores the soft deleted rows the conditions select. */
+    case Restore = 'restore';
+
+    /** Deletes the rows the conditions select, soft deleted ones included, for good. */
+    case ForceDelete = 'forceDelete';
+
     /** Copies the label of the selected rows into the audit table, by `insertUsing()`. */
     case InsertUsing = 'insertUsing';
 

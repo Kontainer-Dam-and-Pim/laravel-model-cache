@@ -80,7 +80,12 @@ final readonly class OperationGenerator
         $others = array_values(array_diff(array_keys($release->schema->tables), [$table->name]));
 
         $subjects += match ($api) {
-            Api::Model => [ReadShape::EagerLoad->value => $relations, ReadShape::WithCount->value => $hasMany, ReadShape::WhereHas->value => $relations],
+            Api::Model => [
+                ReadShape::EagerLoad->value => $relations,
+                ReadShape::WithCount->value => $hasMany,
+                ReadShape::WhereHas->value => $relations,
+                ...($release->model($table->name)->softDeletes ? [ReadShape::WithTrashed->value => [null], ReadShape::OnlyTrashed->value => [null]] : []),
+            ],
             Api::Raw => [ReadShape::RawParentsWithChildren->value => $asParent, ReadShape::RawChildCounts->value => $asParent],
             Api::Builder => [
                 ReadShape::JoinParent->value => array_keys(array_filter($release->schema->foreignKeys, static fn (ForeignKey $foreignKey): bool => $foreignKey->child === $table->name)),
@@ -129,12 +134,13 @@ final readonly class OperationGenerator
             ...($this->driver->isMySqlFamily() || $this->driver === Driver::Sqlite ? [WriteKind::Replace->value => 2] : []),
             ...(count($table->primaryKey) === 1 && $this->driver !== Driver::MariaDb ? [WriteKind::CteDelete->value => 2] : []),
             ...(count($table->primaryKey) === 1 && $this->driver === Driver::PgSql ? [WriteKind::Merge->value => 2] : []),
+            ...($release->model($table->name)->softDeletes ? [WriteKind::Restore->value => 10, WriteKind::ForceDelete->value => 5] : []),
         ];
         $kind = WriteKind::from($this->dice->weighted($kinds));
         $api = $this->dice->pick(match ($kind) {
             WriteKind::Insert, WriteKind::Update, WriteKind::Delete, WriteKind::Upsert => [Api::Builder, Api::Raw, Api::Model],
             WriteKind::Increment, WriteKind::IncrementEach => [Api::Builder, Api::Model],
-            WriteKind::Save, WriteKind::DeleteModel => [Api::Model],
+            WriteKind::Save, WriteKind::DeleteModel, WriteKind::Restore, WriteKind::ForceDelete => [Api::Model],
             WriteKind::Statements, WriteKind::Replace, WriteKind::CteDelete, WriteKind::Merge => [Api::Raw],
             WriteKind::UpdateJoined, WriteKind::DeleteWhereParentExists => [Api::Builder, Api::Raw],
             WriteKind::InsertGetId, WriteKind::InsertOrIgnore, WriteKind::Truncate, WriteKind::InsertUsing, WriteKind::UpdateOrInsert => [Api::Builder],
@@ -153,7 +159,7 @@ final readonly class OperationGenerator
             WriteKind::Merge => new Write($api, $kind, $table->name, [], [$this->row($release, $table, true)]),
             WriteKind::Truncate => new Write($api, $kind, $table->name, [], []),
             WriteKind::Increment, WriteKind::IncrementEach => new Write($api, $kind, $table->name, $this->conditions($release, $table, $api, $this->dice->int(0, 2)), [['amount' => $this->dice->int(1, 2)]]),
-            WriteKind::Delete, WriteKind::DeleteModel, WriteKind::InsertUsing, WriteKind::CteDelete => $this->conditionalWrite($release, $table, $api, $kind, []),
+            WriteKind::Delete, WriteKind::DeleteModel, WriteKind::InsertUsing, WriteKind::CteDelete, WriteKind::Restore, WriteKind::ForceDelete => $this->conditionalWrite($release, $table, $api, $kind, []),
             WriteKind::Update, WriteKind::Save, WriteKind::Statements => $this->conditionalWrite($release, $table, $api, $kind, $this->assignments($table)),
             WriteKind::UpdateOrInsert => new Write($api, $kind, $table->name, $this->keyConditions($table), [$this->assignments($table)]),
             WriteKind::UpdateJoined => $this->conditionalWrite($release, $table, $api, $kind, $this->assignments($table))->joinedTo($this->dice->pick($this->parentKeys($release, $table)), $this->dice->pick(self::LABELS)),
@@ -574,7 +580,7 @@ final readonly class OperationGenerator
             return $this->dice->pick(self::LABELS);
         }
 
-        if ($column->nullable && ! $isKey && $this->dice->chance(20)) {
+        if ($column->nullable && ! $isKey && $this->dice->chance($column->kind === ValueKind::Timestamp ? 70 : 20)) {
             return null;
         }
 
