@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache;
 
-use Kontainer\ModelCache\Support\CascadeRead;
 use Kontainer\ModelCache\Support\DependentTables;
 use Kontainer\ModelCache\Support\Invalidation;
 use Kontainer\ModelCache\Support\Metric;
 use Kontainer\ModelCache\Support\RedisCooldown;
 use Kontainer\ModelCache\Support\RedisReply;
 use Kontainer\ModelCache\Support\RetireReason;
+use Kontainer\ModelCache\Support\TableRead;
 use Kontainer\ModelCache\Support\Write;
 use Throwable;
 use UnexpectedValueException;
@@ -60,11 +60,11 @@ final class Cache
     }
 
     /**
-     * @param  array<string>  $tags
-     * @param  list<CascadeRead>  $cascadeReads  the tables of the read as foreign key cascades into them see it
+     * @param  array<string>  $tags  tags the entry depends on besides those of its tables
+     * @param  list<TableRead>  $reads  the tables the entry was read from, tagged by the script
      * @param  string  $table  the table the metrics count the read under
      */
-    public function lookup(string $key, array $tags, array $cascadeReads, string $table = ''): CacheHit|CacheMiss
+    public function lookup(string $key, array $tags, array $reads, string $table = ''): CacheHit|CacheMiss
     {
         $versionTags = self::canonicalTags($tags);
         $arguments = [
@@ -74,11 +74,20 @@ final class Cache
             (int) $this->serverCheckIsDue(),
             count($versionTags),
             ...$versionTags,
-            count($cascadeReads),
+            count($reads),
         ];
 
-        foreach ($cascadeReads as $read) {
-            array_push($arguments, $this->dependentsName($read->database), $read->tagPrefix, Write::cascadeColumnsField($read->table), count($read->pins));
+        foreach ($reads as $read) {
+            array_push(
+                $arguments,
+                $this->dependentsName($read->database),
+                Tagger::tableSpecificTagPrefix($read->database).$read->table,
+                Tagger::tableUnspecificTagPrefix($read->database).$read->table,
+                Write::primaryKeyField($read->table),
+                Tagger::cascadeTagPrefix($read->database).$read->table.':',
+                Write::cascadeColumnsField($read->table),
+                count($read->pins),
+            );
 
             foreach ($read->pins as $column => $keys) {
                 array_push($arguments, $column, ...$keys->arguments());
@@ -88,17 +97,23 @@ final class Cache
         $reply = RedisReply::list($this->redis->evaluate($this->metrics->script(LuaScripts::LOOKUP), [
             ...$arguments,
             ...$this->metrics->scriptArguments($table),
-        ]), 2, 'lookup reply for key '.$key);
+        ]), 3, 'lookup reply for key '.$key);
 
-        if (isset($reply[2])) {
-            $rows = $this->encoder->decode(RedisReply::string($reply[2], 'lookup payload'));
+        if (RedisReply::integer($reply[2], 'lookup hit flag') === 1) {
+            $rows = $this->encoder->decode(RedisReply::string($reply[3] ?? null, 'lookup payload'));
 
             if ($rows !== null) {
                 return new CacheHit($rows);
             }
         }
 
-        return new CacheMiss(new Generation(RedisReply::string($reply[0], 'lookup generation')), $key, RedisReply::string($reply[1], 'lookup fingerprint'), $table);
+        return new CacheMiss(
+            new Generation(RedisReply::string($reply[0], 'lookup generation')),
+            $key,
+            RedisReply::string($reply[1], 'lookup fingerprint'),
+            $table,
+            array_map(static fn (mixed $tag): string => RedisReply::string($tag, 'lookup tag'), array_slice($reply, 3)),
+        );
     }
 
     /**
@@ -163,7 +178,7 @@ final class Cache
 
         $cascadeSources = $invalidation->cascadeSources();
         $keyedSources = $invalidation->keyedSources();
-        $databases = array_values(array_unique([...array_keys($cascadeSources), ...array_keys($keyedSources)]));
+        $databases = array_values(array_unique([...array_keys($cascadeSources), ...array_keys($keyedSources), ...array_keys($invalidation->rowWrites())]));
         sort($databases, SORT_STRING);
         $arguments[] = count($databases);
 
@@ -177,6 +192,17 @@ final class Cache
 
             foreach ($keyed as $source) {
                 array_push($arguments, $source['field'], $source['fallback'], ...$source['keys']->arguments());
+            }
+
+            $rowWrites = $invalidation->rowWrites()[$database] ?? [];
+            $arguments[] = count($rowWrites);
+
+            foreach ($rowWrites as $rowWrite) {
+                array_push($arguments, Tagger::tableSpecificTagPrefix($database).$rowWrite->table, Write::primaryKeyField($rowWrite->table), count($rowWrite->columns));
+
+                foreach ($rowWrite->columns as $column => $keys) {
+                    array_push($arguments, $column, ...$keys->arguments());
+                }
             }
         }
 

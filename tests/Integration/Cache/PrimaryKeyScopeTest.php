@@ -5,19 +5,21 @@ declare(strict_types=1);
 namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Kontainer\ModelCache\Reflector;
-use Kontainer\ModelCache\Tagger;
+use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
 use Kontainer\ModelCache\Tests\Database\Models\License;
 use Kontainer\ModelCache\Tests\TestCase;
 
 final class PrimaryKeyScopeTest extends TestCase
 {
+    use CacheAssertions;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         License::query()->create(['code' => '1001', 'holder' => 'holder']);
         DB::table('license_renewals')->insert(['id' => 1, 'code' => '1001', 'note' => 'before']);
+        $this->loadDependencyMap();
     }
 
     public function testJoinedTableFilteredByTheModelKeyColumnRefreshesAfterWriteByItsOwnKey(): void
@@ -29,27 +31,38 @@ final class PrimaryKeyScopeTest extends TestCase
         $this->assertSame(['after'], $this->renewalNotesOf('1001'));
     }
 
-    public function testModelKeyPinsRowsOfTheModelTableOnly(): void
+    public function testEachTablePinsRowsOfItsOwnPrimaryKeyOnly(): void
     {
-        $query = License::query()
+        $tags = $this->resolvedReadTags(License::query()
             ->join('license_renewals', 'license_renewals.code', '=', 'licenses.code')
             ->where('licenses.code', '1001')
             ->where('license_renewals.code', '1001')
-            ->getQuery();
+            ->getQuery());
 
-        $this->assertSame(['licenses' => ['1001']], (new Reflector($query))->getRows());
+        $this->assertContains($this->tablePrefix().'table_specific:licenses:row:1001', $tags);
+        $this->assertContains($this->tablePrefix().'table_unspecific:license_renewals', $tags);
     }
 
-    public function testConventionalKeyStillPinsRowsOfOtherTables(): void
+    public function testRowsOfAJoinedTableArePinnedByItsPrimaryKeyFromTheSchema(): void
     {
-        $query = License::query()
+        $tags = $this->resolvedReadTags(License::query()
             ->join('license_renewals', 'license_renewals.code', '=', 'licenses.code')
             ->where('license_renewals.id', 1)
-            ->getQuery();
+            ->getQuery());
 
-        $tags = (new Tagger(new Reflector($query)))->getTags();
+        $this->assertContains($this->tablePrefix().'table_specific:license_renewals:row:1', $tags);
+    }
 
-        $this->assertContains('tags:database:'.DB::getDatabaseName().':table_specific:license_renewals:row:1', $tags);
+    public function testRowsAreNotPinnedByAColumnAModelCallsItsKeyThatTheSchemaDoesNot(): void
+    {
+        $tags = $this->resolvedReadTags(DB::table('license_renewals')->where('code', '1001'));
+
+        $this->assertSame([$this->tablePrefix().'table_unspecific:license_renewals'], $tags);
+    }
+
+    private function tablePrefix(): string
+    {
+        return 'tags:database:'.DB::connection()->getDatabaseName().':';
     }
 
     /**

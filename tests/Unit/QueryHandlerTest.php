@@ -13,6 +13,7 @@ use Kontainer\ModelCache\Encoder;
 use Kontainer\ModelCache\ExpirationPolicy;
 use Kontainer\ModelCache\QueryHandler;
 use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Support\AssignedColumns;
 use Kontainer\ModelCache\Support\Write;
 use Kontainer\ModelCache\Tests\Concerns\RecordsRedisCommands;
 use Kontainer\ModelCache\Tests\TestCase;
@@ -74,10 +75,10 @@ class QueryHandlerTest extends TestCase
         $handler = new QueryHandler($this->cache);
         $builder = DB::table('cars')->where('id', 1);
         $handler->cacheQuery(DB::table('drivers'), fn (): array => []);
-        $handler->invalidateQuery(DB::table('drivers'), 'update', Write::update(['name']), ['name' => 'warm up foreign keys']);
+        $handler->invalidateQuery(DB::table('drivers'), 'update', Write::update(['name']), ['name' => 'warm up foreign keys'], AssignedColumns::updated('drivers', ['name' => 'warm up foreign keys']));
 
         $missCommands = $this->recordRedisCommands(fn () => $handler->cacheQuery($builder, fn (): array => [['id' => 1]]));
-        $invalidationCommands = $this->recordRedisCommands(fn () => $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'x']));
+        $invalidationCommands = $this->recordRedisCommands(fn () => $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'x'], AssignedColumns::updated('cars', ['name' => 'x'])));
 
         $this->assertSame(['evalsha', 'evalsha'], $missCommands);
         $this->assertSame(['evalsha'], $invalidationCommands);
@@ -117,7 +118,7 @@ class QueryHandlerTest extends TestCase
         $builder = DB::table('cars')->where('id', 1);
 
         $handler->cacheQuery($builder, function () use ($handler): array {
-            $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'after']);
+            $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'after'], AssignedColumns::updated('cars', ['name' => 'after']));
 
             return [['id' => 1, 'name' => 'before']];
         });
@@ -171,7 +172,7 @@ class QueryHandlerTest extends TestCase
         for ($query = 0; $query < 5; $query++) {
             $handler->cacheQuery(DB::table('cars'), fn (): array => []);
         }
-        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'x']);
+        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'x'], AssignedColumns::updated('cars', ['name' => 'x']));
 
         Log::shouldHaveReceived('warning')->once()->withArgs(fn (string $message): bool => ! str_contains($message, 'cooldown'));
         Log::shouldHaveReceived('error')->once()->withArgs(fn (string $message): bool => str_contains($message, 'cooldown'));
@@ -182,8 +183,8 @@ class QueryHandlerTest extends TestCase
         Log::spy();
         $handler = $this->handlerWithUnreachableRedis();
 
-        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'x']);
-        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'y']);
+        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'x'], AssignedColumns::updated('cars', ['name' => 'x']));
+        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'y'], AssignedColumns::updated('cars', ['name' => 'y']));
 
         Log::shouldHaveReceived('error')->twice();
     }
@@ -193,7 +194,7 @@ class QueryHandlerTest extends TestCase
         $handler = new QueryHandler($this->cache);
         $handler->cacheQuery(DB::table('cars'), fn (): array => [['id' => 1, 'name' => 'cached']]);
 
-        DB::pretend(fn () => $handler->invalidateQuery(DB::table('cars'), 'update', Write::update(['name']), ['name' => 'pretended']));
+        DB::pretend(fn () => $handler->invalidateQuery(DB::table('cars'), 'update', Write::update(['name']), ['name' => 'pretended'], AssignedColumns::updated('cars', ['name' => 'pretended'])));
 
         $this->assertSame([['id' => 1, 'name' => 'cached']], $handler->cacheQuery(DB::table('cars'), fn (): array => [['id' => 1, 'name' => 'fresh']]));
     }
@@ -226,7 +227,7 @@ class QueryHandlerTest extends TestCase
         $handler->cacheQuery(DB::table('drivers'), fn (): array => [['id' => 1, 'name' => 'cached']]);
 
         config(['model-cache.scope' => 'everything']);
-        $handler->invalidateQuery(DB::table('cars'), 'update', Write::update(['name']), ['name' => 'x']);
+        $handler->invalidateQuery(DB::table('cars'), 'update', Write::update(['name']), ['name' => 'x'], AssignedColumns::updated('cars', ['name' => 'x']));
         config(['model-cache.scope' => 'all']);
 
         $this->assertSame([['id' => 1, 'name' => 'fresh']], $handler->cacheQuery(DB::table('drivers'), fn (): array => [['id' => 1, 'name' => 'fresh']]));

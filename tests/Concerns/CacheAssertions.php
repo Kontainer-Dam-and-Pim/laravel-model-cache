@@ -59,7 +59,22 @@ trait CacheAssertions
         $reflector = new Reflector($builder);
         $tagger = new Tagger($reflector);
 
-        return [(new Hasher($reflector))->getHash(), new ReadTags($tagger->getTags(), $tagger->cascadeReads())];
+        return [(new Hasher($reflector))->getHash(), new ReadTags([], $tagger->reads())];
+    }
+
+    /**
+     * The tags a lookup of the read depends on besides its cascade tags, as the lookup script
+     * tags its tables.
+     *
+     * @return list<string>
+     */
+    protected function resolvedReadTags(Builder $builder): array
+    {
+        [, $read] = $this->cacheKeyAndTags($builder);
+        $lookup = $this->lookupRead('resolved-read-tags', $read);
+        Assert::assertInstanceOf(CacheMiss::class, $lookup, 'Nothing is ever stored under the key that resolves tags');
+
+        return $lookup->tags;
     }
 
     /**
@@ -69,7 +84,7 @@ trait CacheAssertions
     {
         $read = $tags instanceof ReadTags ? $tags : new ReadTags(array_values($tags), []);
 
-        return $this->modelCache()->lookup($key, $read->tags, $read->cascadeReads);
+        return $this->modelCache()->lookup($key, $read->tags, $read->reads);
     }
 
     private function modelCache(): Cache

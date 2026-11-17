@@ -5,47 +5,50 @@ declare(strict_types=1);
 namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Kontainer\ModelCache\Reflector;
-use Kontainer\ModelCache\Tagger;
+use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
 use Kontainer\ModelCache\Tests\TestCase;
 
 class TagsAndKeysTest extends TestCase
 {
+    use CacheAssertions;
+
     public function testSelectWithoutRowsHasUnspecificTag(): void
     {
-        $builder = DB::table('cars');
-        $reflector = new Reflector($builder);
-        $dbName = $reflector->getDatabase();
+        $this->loadDependencyMap();
 
-        $tags = (new Tagger($reflector))->getTags();
-        $this->assertContains("tags:database:{$dbName}:table_unspecific:cars", $tags);
+        $this->assertSame([$this->tableTag('unspecific', 'cars')], $this->resolvedReadTags(DB::table('cars')));
     }
 
     public function testSelectWithRowsHasSpecificAndRowTags(): void
     {
-        // Seed one car
-        DB::table('cars')->insert(['id' => 1717, 'name' => 'T', 'engine_id' => null, 'driver_id' => null]);
+        $this->loadDependencyMap();
 
-        // Consider rows
-        config(['model-cache.consider_rows' => true]);
-        $builder = DB::table('cars')->where('id', 1717);
-        $reflector = new Reflector($builder);
-        $dbName = $reflector->getDatabase();
-
-        $tags = (new Tagger($reflector))->getTags();
-        $this->assertContains("tags:database:{$dbName}:table_specific:cars", $tags);
-        $this->assertNotContains("tags:database:{$dbName}:table_unspecific:cars", $tags);
-        $this->assertContains("tags:database:{$dbName}:table_specific:cars:row:1717", $tags);
+        $this->assertSame(
+            [$this->tableTag('specific', 'cars'), $this->tableTag('specific', 'cars').':row:1717'],
+            $this->resolvedReadTags(DB::table('cars')->where('id', 1717)),
+        );
     }
 
-    public function testTruncateHasBothSpecificAndUnspecificTags(): void
+    public function testSelectWithRowsBeforeTheDependencyMapIsKnownHasUnspecificTag(): void
     {
-        $builder = DB::table('cars');
-        $reflector = new Reflector($builder, Reflector::QUERY_TYPE_TRUNCATE);
-        $dbName = $reflector->getDatabase();
+        $this->assertSame([$this->tableTag('unspecific', 'cars')], $this->resolvedReadTags(DB::table('cars')->where('id', 1717)));
+    }
 
-        $tags = (new Tagger($reflector))->getTags();
-        $this->assertContains("tags:database:{$dbName}:table_specific:cars", $tags);
-        $this->assertContains("tags:database:{$dbName}:table_unspecific:cars", $tags);
+    public function testTruncateRefreshesRowAndTableReads(): void
+    {
+        DB::table('cars')->insert(['id' => 1717, 'name' => 'T', 'engine_id' => null, 'driver_id' => null]);
+        $this->loadDependencyMap();
+        $this->assertSame('T', DB::table('cars')->where('id', 1717)->value('name'));
+        $this->assertSame(1, DB::table('cars')->count());
+
+        DB::table('cars')->truncate();
+
+        $this->assertNull(DB::table('cars')->where('id', 1717)->value('name'));
+        $this->assertSame(0, DB::table('cars')->count());
+    }
+
+    private function tableTag(string $kind, string $table): string
+    {
+        return 'tags:database:'.DB::connection()->getDatabaseName().":table_{$kind}:{$table}";
     }
 }

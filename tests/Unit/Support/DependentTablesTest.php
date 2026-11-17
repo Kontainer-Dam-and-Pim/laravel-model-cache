@@ -44,6 +44,12 @@ final class DependentTablesTest extends TestCase
             foreignKeys: [['constraint_id' => 1, 'child_table' => 'pets', 'parent_table' => 'owners', 'child_column' => 'owner_id', 'parent_column' => 'id',
                 'delete_rule' => 'CASCADE', 'update_rule' => 'NO_ACTION', 'child_type' => 'bigint', 'parent_type' => 'bigint']],
             views: [['base_table' => 'pets', 'view_name' => 'pet_counts']],
+            primaryKeys: [
+                ['table_name' => 'owners', 'column_name' => 'ID', 'data_type' => 'bigint'],
+                ['table_name' => 'car_material', 'column_name' => 'car_id', 'data_type' => 'bigint'],
+                ['table_name' => 'car_material', 'column_name' => 'material_id', 'data_type' => 'bigint'],
+                ['table_name' => 'snapshots', 'column_name' => 'taken_at', 'data_type' => 'datetime2'],
+            ],
             triggers: [
                 ['id' => 7, 'name' => 'owners_audit', 'table_name' => 'owners', 'event' => 'DELETE', 'body' => "create trigger owners_audit on owners after delete, update as insert into owner_audits (event) values ('changed')"],
                 ['id' => 7, 'name' => 'owners_audit', 'table_name' => 'owners', 'event' => 'UPDATE', 'body' => "create trigger owners_audit on owners after delete, update as insert into owner_audits (event) values ('changed')"],
@@ -57,6 +63,9 @@ final class DependentTablesTest extends TestCase
         $this->assertArrayNotHasKey('gi:owners', $dependents);
         $this->assertArrayNotHasKey('u:owners', $dependents);
         $this->assertSame(["owner_id\tn"], $dependents['k:pets']);
+        $this->assertSame(["id\tn"], $dependents['p:owners']);
+        $this->assertArrayNotHasKey('p:car_material', $dependents, 'Rows of a composite key are not tagged');
+        $this->assertArrayNotHasKey('p:snapshots', $dependents, 'Rows of a key of a type values cannot be keyed for are not tagged');
     }
 
     public function testSqlServerObjectsWhoseNameIsHiddenFailLoudly(): void
@@ -88,10 +97,11 @@ final class DependentTablesTest extends TestCase
      * @param  list<array<string, mixed>>  $foreignKeys
      * @param  list<array<string, mixed>>  $views
      * @param  list<array<string, mixed>>  $triggers
+     * @param  list<array<string, mixed>>  $primaryKeys
      */
-    private static function sqlServer(array $foreignKeys, array $views, array $triggers): SqlServerConnection
+    private static function sqlServer(array $foreignKeys, array $views, array $triggers, array $primaryKeys = []): SqlServerConnection
     {
-        $catalog = ['sys.foreign_keys' => $foreignKeys, 'sys.sql_expression_dependencies' => $views, 'sys.triggers' => $triggers];
+        $catalog = ['sys.foreign_keys' => $foreignKeys, 'sys.sql_expression_dependencies' => $views, 'sys.triggers' => $triggers, 'sys.indexes' => $primaryKeys];
 
         return new class($catalog) extends SqlServerConnection
         {

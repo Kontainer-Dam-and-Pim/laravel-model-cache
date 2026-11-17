@@ -16,7 +16,7 @@ use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use Kontainer\ModelCache\QueryHandler;
 use Kontainer\ModelCache\Reflector;
-use Kontainer\ModelCache\Support\AssignedRows;
+use Kontainer\ModelCache\Support\AssignedColumns;
 use Kontainer\ModelCache\Support\SqlAliasParser;
 use Kontainer\ModelCache\Support\Write;
 use LogicException;
@@ -91,9 +91,10 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     }
 
     /**
-     * The primary key column of a table the query names. Only the model's own table has a known
-     * key; every other table is assumed to use the conventional key, the same one any builder
-     * without a model assumes, so reads and writes of a table always agree on its row tags.
+     * The column a delete of the table is narrowed by when its conditions pin it: the model's key
+     * for the model's own table, the conventional key otherwise. Any pinned column narrows a
+     * delete correctly, since the dependency map lists foreign keys by the column they reference;
+     * row tags never use it, they take the key from the schema (see `Tagger`).
      */
     public function primaryKeyOf(string $table): string
     {
@@ -105,13 +106,6 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     private function targetTable(): ?string
     {
         return is_string($this->from) ? SqlAliasParser::stripAlias($this->from) : null;
-    }
-
-    private function primaryKeyOfTarget(): ?string
-    {
-        $table = $this->targetTable();
-
-        return $table === null ? null : $this->primaryKeyOf($table);
     }
 
     /** {@inheritDoc} */
@@ -165,7 +159,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insert(array $values)
     {
         $result = $this->runStatement(fn () => parent::insert($values));
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), $values, AssignedColumns::inserted($this->targetTable(), $values));
 
         return $result;
     }
@@ -178,7 +172,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertUsing(array $columns, $query)
     {
         $result = $this->runStatement(fn () => $this->withoutTrackingCompiledSubQueries(fn () => parent::insertUsing($columns, $query)));
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), [], AssignedRows::unknown());
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), [], AssignedColumns::unknown());
 
         return $result;
     }
@@ -191,7 +185,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertOrIgnoreUsing(array $columns, $query)
     {
         $result = $this->runStatement(fn () => $this->withoutTrackingCompiledSubQueries(fn () => parent::insertOrIgnoreUsing($columns, $query)));
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), [], AssignedRows::unknown());
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), [], AssignedColumns::unknown());
 
         return $result;
     }
@@ -204,7 +198,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function updateFrom(array $values)
     {
         $result = $this->runStatement(fn () => parent::updateFrom($values));
-        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, Write::update(array_keys($values))->affecting($result), $values, $this->rowsReassignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, Write::update(array_keys($values))->affecting($result), $values, AssignedColumns::updated($this->targetTable(), $values));
 
         return $result;
     }
@@ -217,8 +211,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertGetId(array $values, $sequence = null)
     {
         $id = $this->runStatement(fn () => parent::insertGetId($values, $sequence));
-        $primaryKey = $this->primaryKeyOfTarget();
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), $values, $primaryKey === null ? AssignedRows::unknown() : $this->rowsAssignedBy([$primaryKey => $id]));
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), $values, AssignedColumns::inserted($this->targetTable(), $values + [$sequence ?? self::DEFAULT_PRIMARY_KEY_NAME => $id]));
 
         return $id;
     }
@@ -231,7 +224,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function update(array $values)
     {
         $count = $this->runStatement(fn () => parent::update($values));
-        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, Write::update(array_keys($values))->affecting($count), $values, $this->rowsReassignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, Write::update(array_keys($values))->affecting($count), $values, AssignedColumns::updated($this->targetTable(), $values));
 
         return $count;
     }
@@ -245,7 +238,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function upsert(array $values, array|string $uniqueBy, ?array $update = null)
     {
         $result = $this->runStatement(fn () => parent::upsert($values, $uniqueBy, $update));
-        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, Write::update(self::upsertedColumns($values, $update))->affecting($result), $values);
+        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, Write::update(self::upsertedColumns($values, $update))->affecting($result), $values, AssignedColumns::unknown());
 
         return $result;
     }
@@ -258,7 +251,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertOrIgnore(array $values)
     {
         $result = $this->runStatement(fn () => parent::insertOrIgnore($values));
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), $values, AssignedColumns::inserted($this->targetTable(), $values));
 
         return $result;
     }
@@ -272,7 +265,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertOrIgnoreReturning(array $values, array $returning = ['*'], array|string|null $uniqueBy = null)
     {
         $result = $this->runStatement(fn () => parent::insertOrIgnoreReturning($values, $returning, $uniqueBy));
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), $values, AssignedColumns::inserted($this->targetTable(), $values));
 
         return $result;
     }
@@ -281,7 +274,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function delete($id = null)
     {
         $count = $this->runStatement(fn () => parent::delete($id));
-        $this->invalidate(Reflector::QUERY_TYPE_DELETE, Write::delete()->affecting($count));
+        $this->invalidate(Reflector::QUERY_TYPE_DELETE, Write::delete()->affecting($count), [], AssignedColumns::none());
 
         return $count;
     }
@@ -290,7 +283,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function truncate()
     {
         $this->runStatement(fn () => parent::truncate());
-        $this->invalidate(Reflector::QUERY_TYPE_TRUNCATE, Write::truncate());
+        $this->invalidate(Reflector::QUERY_TYPE_TRUNCATE, Write::truncate(), [], AssignedColumns::unknown());
     }
 
     /**
@@ -309,9 +302,9 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /**
      * @param  array<int|string, mixed>  $values
      */
-    private function invalidate(string $queryType, Write $write, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
+    private function invalidate(string $queryType, Write $write, array $values, AssignedColumns $assigned): void
     {
-        $this->handler->invalidateQuery($this, $queryType, $write, $values, $assignedRows);
+        $this->handler->invalidateQuery($this, $queryType, $write, $values, $assigned);
     }
 
     /**
@@ -335,58 +328,5 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         }
 
         return $columns;
-    }
-
-    /**
-     * @param  array<int|string, mixed>  $values
-     */
-    private function rowsReassignedBy(array $values): AssignedRows
-    {
-        $primaryKey = $this->primaryKeyOfTarget();
-
-        if ($primaryKey === null) {
-            return AssignedRows::unknown();
-        }
-
-        $assignsKey = false;
-
-        foreach (array_keys($values) as $column) {
-            if ($column === $primaryKey) {
-                $assignsKey = true;
-            } elseif (is_string($column) && str_ends_with($column, '.'.$primaryKey)) {
-                return AssignedRows::unknown();
-            }
-        }
-
-        return $assignsKey ? $this->rowsAssignedBy($values) : new AssignedRows;
-    }
-
-    /**
-     * @param  array<int|string, mixed>  $values
-     */
-    private function rowsAssignedBy(array $values): AssignedRows
-    {
-        $table = $this->targetTable();
-
-        if ($table === null) {
-            return AssignedRows::unknown();
-        }
-
-        $primaryKey = $this->primaryKeyOf($table);
-
-        $ids = [];
-        $complete = true;
-
-        foreach (is_array(reset($values)) ? $values : [$values] as $row) {
-            $id = is_array($row) ? ($row[$primaryKey] ?? null) : null;
-
-            if ((is_int($id) || is_string($id)) && $id !== '') {
-                $ids[] = $id;
-            } else {
-                $complete = false;
-            }
-        }
-
-        return AssignedRows::of($table, $ids, $complete);
     }
 }

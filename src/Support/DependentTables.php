@@ -36,7 +36,9 @@ use UnexpectedValueException;
  * update of them changes change. A trigger whose body cannot be read may write any table, so the
  * writes firing it change `EVERY_TABLE`. A PostgreSQL table holds the rows of the tables
  * inheriting from it, its partitions included: a write to it is the same write to them, and a
- * change to one of them is read through it (`read`) without being a write to it.
+ * change to one of them is read through it (`read`) without being a write to it. The map also
+ * names each table's single-column primary key and how its values compare, by which every host
+ * tags rows alike (see `Tagger`).
  *
  * @phpstan-type ForeignKey array{child: string, parentColumns: list<string>, childColumns: list<string>, keyType: ColumnType|null, onDelete: ReferentialAction, onUpdate: ReferentialAction}
  * @phpstan-type Change array{0: 'any'|'insert'|'delete'|'truncate'|'read', 1: string}|array{0: 'update', 1: string, 2: string}
@@ -50,7 +52,7 @@ final class DependentTables
      * Part of the name of the dependency map in Redis, so hosts reading another field layout
      * keep their own map.
      */
-    public const int LAYOUT = 7;
+    public const int LAYOUT = 8;
 
     /**
      * Listed among the tables a write changes when they cannot be told, which no table tag
@@ -100,7 +102,47 @@ final class DependentTables
             $triggers[$parent] = [...$triggers[$parent] ?? [], ...self::writesReachingChild($child, $parentIsPartitioned)];
         }
 
-        return self::fields($everyWrite, $viewBases, self::foreignKeys($connection, $prefix), $triggers, $parents);
+        $declaredTypes = self::declaredTypes($connection);
+        $fields = self::fields($everyWrite, $viewBases, self::foreignKeys($connection, $prefix, $declaredTypes), $triggers, $parents);
+
+        foreach (self::primaryKeys($connection, $prefix, $declaredTypes) as $table => $key) {
+            $fields[Write::primaryKeyField($table)] = [$key];
+        }
+
+        ksort($fields, SORT_STRING);
+
+        return $fields;
+    }
+
+    /**
+     * The primary key of each table whose key is a single column of a type its values can be
+     * keyed by, as `<lowercase column>\t<ColumnType>`.
+     *
+     * @param  array<string, array<string, string>>  $declaredTypes  see `declaredTypes()`
+     * @return array<string, string> tagged table => key
+     */
+    private static function primaryKeys(Connection $connection, string $prefix, array $declaredTypes): array
+    {
+        $columns = [];
+        foreach (self::rows($connection, self::primaryKeyQuery($connection)) as $row) {
+            $table = self::text($row, 'table_name');
+            $column = self::text($row, 'column_name');
+            $declared = $declaredTypes[strtolower($table)][strtolower($column)] ?? self::optionalText($row, 'data_type');
+            $columns[TableName::tagged($table, $prefix)][] = [Write::columnName($column), ColumnType::of($declared)];
+        }
+
+        $keys = [];
+        foreach ($columns as $table => $tableColumns) {
+            [$column, $type] = $tableColumns[0];
+
+            if (count($tableColumns) === 1 && $type !== null) {
+                $keys[$table] = $column."\t".$type->value;
+            }
+        }
+
+        ksort($keys, SORT_STRING);
+
+        return $keys;
     }
 
     /**
@@ -175,12 +217,33 @@ final class DependentTables
     }
 
     /**
+     * One row per primary key column, with its declared type except on MySQL (see `declaredTypes()`).
+     */
+    private static function primaryKeyQuery(Connection $connection): string
+    {
+        return match ($connection->getDriverName()) {
+            'mysql', 'mariadb' => "select table_name as table_name, column_name as column_name, '' as data_type from information_schema.key_column_usage"
+                ." where table_schema = database() and constraint_name = 'PRIMARY'",
+            'pgsql' => 'select c.relname as table_name, a.attname as column_name, t.typname as data_type from pg_index i'
+                .' join pg_class c on c.oid = i.indrelid join pg_namespace n on n.oid = c.relnamespace'
+                .' join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any(i.indkey) join pg_type t on t.oid = a.atttypid'
+                .' where i.indisprimary and n.nspname = any(current_schemas(false))',
+            'sqlite' => 'select m.name as table_name, p.name as column_name, p.type as data_type'
+                ." from sqlite_master m join pragma_table_info(m.name) p where m.type = 'table' and p.pk > 0",
+            'sqlsrv' => 'select object_name(i.object_id) as table_name, c.name as column_name, type_name(c.system_type_id) as data_type from sys.indexes i'
+                .' join sys.index_columns ic on ic.object_id = i.object_id and ic.index_id = i.index_id'
+                .' join sys.columns c on c.object_id = ic.object_id and c.column_id = ic.column_id where i.is_primary_key = 1',
+            default => throw new RuntimeException('Model Cache cannot read primary keys of driver '.$connection->getDriverName()),
+        };
+    }
+
+    /**
+     * @param  array<string, array<string, string>>  $declaredTypes  see `declaredTypes()`
      * @return array<string, list<ForeignKey>> parent table => foreign keys referencing it
      */
-    private static function foreignKeys(Connection $connection, string $prefix): array
+    private static function foreignKeys(Connection $connection, string $prefix, array $declaredTypes): array
     {
         $constraints = [];
-        $declaredTypes = self::declaredTypes($connection);
 
         foreach ($connection->select(self::foreignKeyQuery($connection), [], false) as $row) {
             $row = (array) $row;
@@ -243,9 +306,9 @@ final class DependentTables
     }
 
     /**
-     * The declared type of every column, for the databases whose foreign key query does not list
-     * them: on MySQL, joining `information_schema.columns` to the keys takes far longer than
-     * reading the columns of the schema once.
+     * The declared type of every column, for the databases whose foreign key and primary key
+     * queries do not list them: on MySQL, joining `information_schema.columns` to the keys takes
+     * far longer than reading the columns of the schema once.
      *
      * @return array<string, array<string, string>> lowercase table => lowercase column => declared type
      */

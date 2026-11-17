@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache\Tests\Unit\Support;
 
+use Kontainer\ModelCache\Support\ColumnType;
 use Kontainer\ModelCache\Support\RowKeys;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -32,7 +33,7 @@ final class RowKeysTest extends TestCase
     #[DataProvider('equivalentIntegerKeys')]
     public function testIntegerKeysTheDatabaseConsidersEqualShareATag(array $values, array $expected): void
     {
-        $this->assertSame($expected, RowKeys::canonical($values, false));
+        $this->assertSame($expected, RowKeys::forColumn($values, ColumnType::Integer));
     }
 
     /**
@@ -51,12 +52,12 @@ final class RowKeysTest extends TestCase
     #[DataProvider('ambiguousIntegerKeys')]
     public function testIntegerKeysTheDatabaseMayCastGiveUpOnRowTags(array $values): void
     {
-        $this->assertNull(RowKeys::canonical($values, false));
+        $this->assertNull(RowKeys::forColumn($values, ColumnType::Integer));
     }
 
     public function testStringKeysIgnoreAsciiCase(): void
     {
-        $this->assertSame(['abc-1_x'], RowKeys::canonical(['ABC-1_x', 'abc-1_X'], true));
+        $this->assertSame(['abc-1_x'], RowKeys::forColumn(['ABC-1_x', 'abc-1_X'], ColumnType::Text));
     }
 
     /**
@@ -73,17 +74,17 @@ final class RowKeysTest extends TestCase
     #[DataProvider('ambiguousStringKeys')]
     public function testStringKeysACollationMayEquateGiveUpOnRowTags(array $values): void
     {
-        $this->assertNull(RowKeys::canonical($values, true));
+        $this->assertNull(RowKeys::forColumn($values, ColumnType::Text));
     }
 
     public function testTooManyKeysGiveUpOnRowTags(): void
     {
-        $this->assertCount(RowKeys::MAX_PER_TABLE, RowKeys::canonical(range(1, RowKeys::MAX_PER_TABLE), false));
-        $this->assertNull(RowKeys::canonical(range(1, RowKeys::MAX_PER_TABLE + 1), false));
+        $this->assertCount(RowKeys::MAX_PER_TABLE, RowKeys::forColumn(range(1, RowKeys::MAX_PER_TABLE), ColumnType::Integer));
+        $this->assertNull(RowKeys::forColumn(range(1, RowKeys::MAX_PER_TABLE + 1), ColumnType::Integer));
     }
 
-    public function testNoKeysMeansNoRows(): void
+    public function testNoValuesNameNoRows(): void
     {
-        $this->assertSame([], RowKeys::canonical([], false));
+        $this->assertNull(RowKeys::forColumn([], ColumnType::Integer));
     }
 }

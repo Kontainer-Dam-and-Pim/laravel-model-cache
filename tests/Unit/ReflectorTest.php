@@ -77,21 +77,14 @@ class ReflectorTest extends TestCase
         $this->assertContains('cars', $tables);
     }
 
-    public function testGetRowsFromBasicAndInWheresQualifiedAndUnqualified(): void
+    public function testColumnPinsFromBasicAndInWheresQualifiedAndUnqualified(): void
     {
-        // Base table cars with unqualified id and qualified id
         $b = DB::table('cars')
             ->where('id', '=', 7)
             ->where('cars.id', '=', 5)
             ->whereIn('drivers.id', [1, 2]);
 
-        $rows = (new Reflector($b))->getRows();
-
-        $this->assertArrayHasKey('cars', $rows);
-        $this->assertEqualsCanonicalizing([7, 5], $rows['cars']);
-        // Joined table references with primary key id should be captured as well
-        $this->assertArrayHasKey('drivers', $rows);
-        $this->assertEqualsCanonicalizing([1, 2], $rows['drivers']);
+        $this->assertSame(['cars' => ['id' => [7, 5]], 'drivers' => ['id' => [1, 2]]], (new Reflector($b))->getColumnPins());
     }
 
     public function testGetParametersReflectsQueryBindings(): void

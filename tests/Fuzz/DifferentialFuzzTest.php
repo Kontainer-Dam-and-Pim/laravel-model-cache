@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache\Tests\Fuzz;
 
+use Kontainer\ModelCache\Tests\Fuzz\Support\FuzzEnvironment;
 use Kontainer\ModelCache\Tests\Fuzz\Support\Workload;
 use Kontainer\ModelCache\Tests\TestCase;
 
@@ -15,21 +16,21 @@ final class DifferentialFuzzTest extends TestCase
 
     public function testCachedReadsAlwaysMatchTheDatabase(): void
     {
-        $this->runWorkload(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS));
+        $this->runWorkload(FuzzEnvironment::iterations(self::DEFAULT_ITERATIONS));
     }
 
     public function testCachedReadsMatchTheDatabaseWithoutRowLevelTags(): void
     {
         config(['model-cache.consider_rows' => false]);
 
-        $this->runWorkload(intdiv(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS), 2));
+        $this->runWorkload(intdiv(FuzzEnvironment::iterations(self::DEFAULT_ITERATIONS), 2));
     }
 
     public function testCachedReadsMatchTheDatabaseWhenOnlyModelsAreCached(): void
     {
         config(['model-cache.scope' => 'models']);
 
-        $this->runWorkload(intdiv(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS), 2));
+        $this->runWorkload(intdiv(FuzzEnvironment::iterations(self::DEFAULT_ITERATIONS), 2));
     }
 
     public function testCachedReadsMatchTheDatabaseWithoutExpiration(): void
@@ -38,12 +39,12 @@ final class DifferentialFuzzTest extends TestCase
         $this->app->forgetInstance('model-cache.cache');
         $this->app->forgetInstance('model-cache.handler');
 
-        $this->runWorkload(intdiv(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS), 2));
+        $this->runWorkload(intdiv(FuzzEnvironment::iterations(self::DEFAULT_ITERATIONS), 2));
     }
 
     private function runWorkload(int $iterations): void
     {
-        $workload = new Workload(Workload::seedFromEnvironment(), self::databaseDriver());
+        $workload = new Workload(FuzzEnvironment::seed(), self::databaseDriver());
         $workload->run($iterations, self::SWEEP_INTERVAL);
 
         $this->assertGreaterThan(0, $workload->comparisons());

@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Kontainer\ModelCache\Hasher;
-use Kontainer\ModelCache\Reflector;
-use Kontainer\ModelCache\Tagger;
 use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
 use Kontainer\ModelCache\Tests\TestCase;
 
@@ -17,6 +14,7 @@ final class SpecificIsolationTest extends TestCase
 
     public function testUpdateSpecificRowDoesNotInvalidateOtherSpecificRow(): void
     {
+        $this->loadDependencyMap();
         // Arrange: seed two rows
         DB::table('cars')->insert([
             ['id' => 10, 'name' => 'A', 'engine_id' => null, 'driver_id' => null],
@@ -27,13 +25,9 @@ final class SpecificIsolationTest extends TestCase
         $b10 = DB::table('cars')->where('id', 10);
         $b11 = DB::table('cars')->where('id', 11);
 
-        $r10 = new Reflector($b10);
-        $r11 = new Reflector($b11);
+        [$k10, $t10] = $this->cacheKeyAndTags($b10);
 
-        $k10 = (new Hasher($r10))->getHash();
-        $k11 = (new Hasher($r11))->getHash();
-        $t10 = (new Tagger($r10))->getTags();
-        $t11 = (new Tagger($r11))->getTags();
+        [$k11, $t11] = $this->cacheKeyAndTags($b11);
 
         // Seed cache entries for both queries
         $this->seedCache($k10, $t10, [['id' => 10, 'name' => 'A']]);

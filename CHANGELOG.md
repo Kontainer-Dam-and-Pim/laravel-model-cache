@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## [Unreleased]
+### Fixed
+- Row tags took the primary key from the model, or assumed `id` without one, so a write naming rows by one column never reached reads cached by another: a model keyed by a UUID column next to an auto-increment `id` kept serving rows that `DB::table()` or another model updated by `id`, and during a rolling deploy old and new releases that keyed a model differently served each other stale rows. Row tags now use the single-column primary key the schema declares, and its type to compare values, read with the foreign keys once per generation and resolved by the lookup and invalidation scripts, so every host agrees on them. Reads by a column that is not the declared key are tagged by table, writes pinned to it invalidate every read pinned to rows of the table, and reads take table-level tags until a write has read the schema in the current generation. The dependency map layout changes, so hosts running an earlier version keep their own map; finish the deploy before relying on row-level invalidation across them
+- A failed invalidation of a delete pinned to key values, shared through APCu, could not be replayed by the next request: its keys unserialized as an incomplete class, so every replay failed, reads bypassed the cache until the shared entry expired, and the invalidation was then dropped without reaching Redis, leaving the entries it should have invalidated reachable
+
 ## [1.0.1] - 2026-11-16
 ### Fixed
 - Raw multi-table `DELETE ... USING` on SQLite and reads with `CONNECT BY`/`START WITH` on SQL Server failed to parse, so they retired the whole cache or ran uncached; they are now parsed as sqlparser-rs parses them
