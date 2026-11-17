@@ -456,7 +456,7 @@ just test                       # SQLite with phpredis
 just test-mysql                 # also test-mariadb, test-pgsql
 just test-matrix                # every database with phpredis and Predis
 just test --filter=RowKeysTest
-just fuzz                       # MODEL_CACHE_FUZZ_ITERATIONS, MODEL_CACHE_FUZZ_SEED
+just fuzz                       # MODEL_CACHE_FUZZ_ITERATIONS, MODEL_CACHE_FUZZ_RUNS, MODEL_CACHE_FUZZ_SEED
 just concurrency                # forked workers sharing one database and Redis
 just coverage                   # Unit and Integration on every database, fails below 100% line coverage
 just bench
@@ -468,11 +468,29 @@ just lint analyse               # Pint check and PHPStan
 |-------------|--------|
 | Unit        | Individual classes |
 | Integration | Behaviour against a real database and Redis |
-| Fuzz        | Seeded random workloads, comparing every cached read with the uncached query |
+| Fuzz        | Seeded random workloads, schemas, migrations and rolling deploys, comparing every cached read with the uncached query |
 | Concurrency | Parallel processes, checking cached reads against the database afterwards |
 | Benchmark   | Throughput with and without the cache, and Redis commands per cached read |
 
 CI fails unless the Unit and Integration suites, run on every database and with both Redis clients, together cover every line of `src`.
+
+### Rolling deploy fuzzing
+
+`RollingDeployFuzzTest` runs an application through rolling deploys against one database and one Redis, the way pods of old and new releases overlap on Kubernetes:
+
+- **Schemas.** Each run generates tables keyed by integers, text codes or two columns, and unique identifier columns. It adds foreign keys with every referential action the database supports, including self-references and cycles, plus views over tables, keys and other views, and triggers that write other tables.
+- **Releases.** Each deploy adds tables, columns, identifiers, foreign keys, views and triggers, or changes key rules, and backfills new identifiers. A new release may key its models by another column, drop columns, views, triggers or keys it no longer uses, and change its `model-cache` settings.
+- **Pods.** Each pod is a separate PHP process running one release's models and settings. The migration job runs while old pods serve. New pods start next to old ones, old pods restart and stop, and the contract migration sometimes runs before they are gone. Some deploys are rolled back.
+- **Workload.** Reads and writes go through the query builder, Eloquent models and raw SQL. Reads before and after each write come from every pod, mostly of the same rows through each of their keys. Transactions are held open, and Redis is flushed, emptied or evicts keys.
+
+Every read runs through the cache and again without it, and must return the same result. A failing run is shrunk to the fewest steps that still fail and written to `build/fuzz/`:
+
+```bash
+MODEL_CACHE_FUZZ_PLAN=build/fuzz/rolling-pgsql-42.json just test-pgsql --filter=RollingDeploy
+MODEL_CACHE_FUZZ_SEED=42 MODEL_CACHE_FUZZ_TRACE=trace.log just test-pgsql --filter=RollingDeploy   # writes every step and its outcome
+```
+
+`GeneratedMigrationsTest` checks that every generated schema and migration applies on each database, and that the cache reads its foreign keys, views and triggers.
 
 ## License
 
