@@ -128,7 +128,7 @@ final class Coordinator
         }
 
         foreach ($segment as $pod => $steps) {
-            $outcomes = $this->pods[$pod]->receive();
+            $outcomes = $this->pods[$pod]->receive(count($steps));
 
             foreach (array_keys($steps) as $position => $index) {
                 $this->record($index, $steps[$index], $outcomes[$position], false);
