@@ -4,162 +4,172 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache\Tests\Unit;
 
+use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Facades\DB;
 use Kontainer\ModelCache\Reflector;
+use Kontainer\ModelCache\Support\AssignedColumns;
+use Kontainer\ModelCache\Support\ColumnKeys;
+use Kontainer\ModelCache\Support\RowWrite;
+use Kontainer\ModelCache\Support\TableRead;
 use Kontainer\ModelCache\Tagger;
 use Kontainer\ModelCache\Tests\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class TaggerTest extends TestCase
 {
-    private function dbTagPrefix(): string
+    public function testAReadPinsTheValuesItsConditionsFixEachColumnTo(): void
     {
-        return 'tags:database:'.DB::connection()->getDatabaseName();
+        $reads = (new Tagger(new Reflector(DB::table('cars')->whereIn('id', [1, 2])->where('name', 'a'))))->reads();
+
+        $this->assertEquals([new TableRead($this->database(), 'cars', ['id' => ColumnKeys::of([1, 2]), 'name' => ColumnKeys::of(['a'])])], $reads);
     }
 
-    public function testSelectWithoutRowsWhenConsiderRowsFalseProducesDatabaseTableTags(): void
+    /**
+     * @return iterable<string, array{\Closure(): Builder}>
+     */
+    public static function readsPinningNothing(): iterable
+    {
+        yield 'a range' => [static fn (): Builder => DB::table('cars')->where('id', '>', 5)];
+        yield 'a pattern' => [static fn (): Builder => DB::table('cars')->where('name', 'like', 'A%')];
+        yield 'no conditions' => [static fn (): Builder => DB::table('cars')];
+    }
+
+    /**
+     * @param  \Closure(): Builder  $query
+     */
+    #[DataProvider('readsPinningNothing')]
+    public function testAReadWithoutFixedValuesPinsNothing(\Closure $query): void
+    {
+        $this->assertEquals([new TableRead($this->database(), 'cars', [])], (new Tagger(new Reflector($query())))->reads());
+    }
+
+    public function testWithoutConsideringRowsAReadPinsNothing(): void
     {
         config(['model-cache.consider_rows' => false]);
 
-        $b = DB::table('cars');
-        $tags = (new Tagger(new Reflector($b)))->getTags();
-
-        $this->assertSame([$this->dbTagPrefix().':table_unspecific:cars'], $tags);
+        $this->assertEquals([new TableRead($this->database(), 'cars', [])], (new Tagger(new Reflector(DB::table('cars')->where('id', 1))))->reads());
     }
 
-    public function testWithoutRowsTagsSeparateDatabaseAndTableNames(): void
+    public function testAReadOfAnAliasedTableReadsTheTable(): void
     {
-        config(['model-cache.consider_rows' => false]);
-
-        $tags = (new Tagger(new Reflector(DB::table('ab'))))->getTags();
-
-        $this->assertNotContains('tags:database:'.DB::connection()->getDatabaseName().'ab', $tags);
-        $this->assertSame([$this->dbTagPrefix().':table_unspecific:ab'], $tags);
+        $this->assertEquals([new TableRead($this->database(), 'engines', [])], (new Tagger(new Reflector(DB::table('engines as e'))))->reads());
     }
 
-    public function testSelectWithoutRowsWhenConsiderRowsTrueProducesUnspecificTableTag(): void
+    public function testAReadPinsOnlyTheTablesItsQualifiedConditionsName(): void
     {
-        config(['model-cache.consider_rows' => true]);
-
-        $b = DB::table('cars');
-        $tags = (new Tagger(new Reflector($b)))->getTags();
-
-        $this->assertContains($this->dbTagPrefix().':table_unspecific:cars', $tags);
-        $this->assertFalse($this->arrayHasStringContaining($tags, ':row:'));
-    }
-
-    public function testSelectWithRowIdsProducesSpecificTableAndRowTags(): void
-    {
-        config(['model-cache.consider_rows' => true]);
-
-        $b = DB::table('cars')->whereIn('id', [1, 2]);
-        $tags = (new Tagger(new Reflector($b)))->getTags();
-
-        $this->assertContains($this->dbTagPrefix().':table_specific:cars', $tags);
-        $this->assertContains($this->dbTagPrefix().':table_specific:cars:row:1', $tags);
-        $this->assertContains($this->dbTagPrefix().':table_specific:cars:row:2', $tags);
-    }
-
-    public function testUpdateWithoutRowsProducesBothTableTags(): void
-    {
-        config(['model-cache.consider_rows' => true]);
-
-        $b = DB::table('cars');
-        $r = new Reflector($b, Reflector::QUERY_TYPE_UPDATE, ['name' => 'x']);
-        $tags = (new Tagger($r))->getTags();
-
-        $this->assertContains($this->dbTagPrefix().':table_specific:cars', $tags);
-        $this->assertContains($this->dbTagPrefix().':table_unspecific:cars', $tags);
-    }
-
-    public function testUpdateWithSpecificRowsProducesUnspecificAndRowTags(): void
-    {
-        config(['model-cache.consider_rows' => true]);
-
-        $b = DB::table('cars')->whereIn('id', [5, 10]);
-        $r = new Reflector($b, Reflector::QUERY_TYPE_UPDATE, ['name' => 'updated']);
-        $tags = (new Tagger($r))->getTags();
-
-        // Invalidates aggregates but preserves row isolation
-        $this->assertContains($this->dbTagPrefix().':table_unspecific:cars', $tags);
-        $this->assertContains($this->dbTagPrefix().':table_specific:cars:row:5', $tags);
-        $this->assertContains($this->dbTagPrefix().':table_specific:cars:row:10', $tags);
-        // Should NOT have table_specific without row suffix (preserves isolation)
-        $this->assertNotContains($this->dbTagPrefix().':table_specific:cars', $tags);
-    }
-
-    public function testInsertProducesUnspecificTableTag(): void
-    {
-        config(['model-cache.consider_rows' => true]);
-
-        $b = DB::table('cars');
-        $r = new Reflector($b, Reflector::QUERY_TYPE_INSERT, ['name' => 'x']);
-        $tags = (new Tagger($r))->getTags();
-
-        $this->assertContains($this->dbTagPrefix().':table_unspecific:cars', $tags);
-    }
-
-    public function testDeleteWithoutRowsProducesBothTableTags(): void
-    {
-        config(['model-cache.consider_rows' => true]);
-
-        $b = DB::table('cars');
-        $r = new Reflector($b, Reflector::QUERY_TYPE_DELETE);
-        $tags = (new Tagger($r))->getTags();
-
-        $this->assertContains($this->dbTagPrefix().':table_specific:cars', $tags);
-        $this->assertContains($this->dbTagPrefix().':table_unspecific:cars', $tags);
-    }
-
-    public function testTruncateProducesSpecificAndUnspecificTableTags(): void
-    {
-        config(['model-cache.consider_rows' => true]);
-
-        $b = DB::table('cars');
-        $r = new Reflector($b, Reflector::QUERY_TYPE_TRUNCATE);
-        $tags = (new Tagger($r))->getTags();
-
-        $this->assertContains($this->dbTagPrefix().':table_specific:cars', $tags);
-        $this->assertContains($this->dbTagPrefix().':table_unspecific:cars', $tags);
-    }
-
-    public function testAliasNormalizationStripsAsAliasInTableNames(): void
-    {
-        config(['model-cache.consider_rows' => false]);
-
-        $b = DB::table('engines as e');
-        $tags = (new Tagger(new Reflector($b)))->getTags();
-
-        $this->assertContains($this->dbTagPrefix().':table_unspecific:engines', $tags);
-        $this->assertFalse($this->arrayHasStringContaining($tags, ' as '));
-    }
-
-    public function testTagsWithExpressionFromAliasAndWhereRows(): void
-    {
-        config(['model-cache.consider_rows' => true]);
-
-        $sub = DB::table('materials')->select('id');
-        $b = DB::query()
-            ->fromSub($sub, 'materials')
+        $query = DB::query()
+            ->fromSub(DB::table('materials')->select('id'), 'materials')
             ->join('cars', 'cars.id', '=', 'materials.id')
             ->whereIn('cars.id', [10, 20]);
 
-        $tags = (new Tagger(new Reflector($b)))->getTags();
+        $reads = (new Tagger(new Reflector($query)))->reads();
 
-        $this->assertTrue($this->arrayHasStringContaining($tags, ':table_unspecific:materials'));
-        $this->assertFalse($this->arrayHasStringContaining($tags, ':table_unspecific:cars'));
-        $this->assertTrue($this->arrayHasStringContaining($tags, ':table_specific:cars'));
-        $this->assertTrue($this->arrayHasStringContaining($tags, ':table_specific:cars:row:10'));
-        $this->assertTrue($this->arrayHasStringContaining($tags, ':table_specific:cars:row:20'));
+        $this->assertEqualsCanonicalizing([
+            new TableRead($this->database(), 'materials', []),
+            new TableRead($this->database(), 'cars', ['id' => ColumnKeys::of([10, 20])]),
+        ], $reads);
     }
 
-    private function arrayHasStringContaining(array $array, string $needle): bool
+    public function testDatabaseAndTableNamesStaySeparate(): void
     {
-        foreach ($array as $v) {
-            if (is_string($v) && str_contains($v, $needle)) {
-                return true;
-            }
-        }
+        $this->assertEquals([new TableRead($this->database(), 'ab', [])], (new Tagger(new Reflector(DB::table('ab'))))->reads());
+        $this->assertSame(['tags:database:'.$this->database().':table_unspecific:ab'], (new Tagger(new Reflector(DB::table('ab'), Reflector::QUERY_TYPE_DELETE)))->writeTags());
+    }
 
-        return false;
+    public function testEveryWriteReplacesTheUnspecificTagOfItsTables(): void
+    {
+        $tagger = new Tagger(new Reflector(DB::table('cars')->where('id', 1), Reflector::QUERY_TYPE_UPDATE, ['name' => 'x']), AssignedColumns::updated('cars', ['name' => 'x']));
+
+        $this->assertSame(['tags:database:'.$this->database().':table_unspecific:cars'], $tagger->writeTags());
+    }
+
+    public function testAnUpdateNotAssigningAPinnedColumnChangesRowsNamedByIt(): void
+    {
+        $this->assertRowWrite(['id' => ColumnKeys::of([5, 10])], DB::table('cars')->whereIn('id', [5, 10]), Reflector::QUERY_TYPE_UPDATE, AssignedColumns::updated('cars', ['name' => 'x']));
+    }
+
+    public function testAnUpdateAssigningAPinnedColumnChangesRowsNamedByTheOldAndNewValues(): void
+    {
+        $this->assertRowWrite(['id' => ColumnKeys::of([5, 7])], DB::table('cars')->where('id', 5), Reflector::QUERY_TYPE_UPDATE, AssignedColumns::updated('cars', ['id' => 7]));
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function uncertainAssignments(): iterable
+    {
+        yield 'an expression' => [['id' => new Expression('id + 1')]];
+        yield 'a qualified column' => [['cars.id' => 7]];
+        yield 'a value no type keys' => [['id' => 'not a key!']];
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     */
+    #[DataProvider('uncertainAssignments')]
+    public function testAnUpdateAssigningAPinnedColumnUncertainlyChangesRowsItCannotName(array $values): void
+    {
+        $this->assertRowWrite([], DB::table('cars')->where('id', 5), Reflector::QUERY_TYPE_UPDATE, AssignedColumns::updated('cars', $values));
+    }
+
+    public function testAnUpdateOfAJoinedTableNamesNoRowsOfTablesItMayAssign(): void
+    {
+        $query = DB::table('cars')->join('drivers', 'drivers.id', '=', 'cars.driver_id')->where('cars.id', 1)->where('drivers.id', 2);
+        $tagger = new Tagger(new Reflector($query, Reflector::QUERY_TYPE_UPDATE, ['name' => 'x']), AssignedColumns::updated('cars', ['name' => 'x']));
+
+        $this->assertEqualsCanonicalizing([
+            new RowWrite($this->database(), 'cars', ['id' => ColumnKeys::of([1])]),
+            new RowWrite($this->database(), 'drivers', []),
+        ], $tagger->rowWrites());
+    }
+
+    public function testADeleteChangesRowsNamedByEveryPinnedColumn(): void
+    {
+        $this->assertRowWrite(['id' => ColumnKeys::of([3]), 'name' => ColumnKeys::of(['a'])], DB::table('cars')->where('id', 3)->where('name', 'a'), Reflector::QUERY_TYPE_DELETE, AssignedColumns::none());
+    }
+
+    public function testAnInsertChangesRowsNamedByEveryColumnEachRowGivesAKeyedValue(): void
+    {
+        $assigned = AssignedColumns::inserted('cars', [['id' => 1, 'name' => 'a', 'engine_id' => null], ['id' => 2, 'name' => 'b', 'engine_id' => 3]]);
+
+        $this->assertRowWrite(['id' => ColumnKeys::of([1, 2]), 'name' => ColumnKeys::of(['a', 'b'])], DB::table('cars'), Reflector::QUERY_TYPE_INSERT, $assigned);
+    }
+
+    public function testAnInsertOfRowsLackingAColumnNamesNoRowsByIt(): void
+    {
+        $this->assertRowWrite(['name' => ColumnKeys::of(['a', 'b'])], DB::table('cars'), Reflector::QUERY_TYPE_INSERT, AssignedColumns::inserted('cars', [['id' => 1, 'name' => 'a'], ['name' => 'b']]));
+    }
+
+    public function testAnInsertOfValuesThatAreNoRowsNamesNoRows(): void
+    {
+        $this->assertRowWrite([], DB::table('cars'), Reflector::QUERY_TYPE_INSERT, AssignedColumns::inserted('cars', [['id' => 1], 'not a row']));
+    }
+
+    public function testWritesWhoseRowsAreUnknownNameNone(): void
+    {
+        $this->assertRowWrite([], DB::table('cars')->where('id', 1), Reflector::QUERY_TYPE_TRUNCATE, AssignedColumns::unknown());
+        $this->assertRowWrite([], DB::table('cars')->where('id', 1), Reflector::QUERY_TYPE_UPDATE, AssignedColumns::unknown());
+        $this->assertRowWrite([], DB::table('cars'), Reflector::QUERY_TYPE_INSERT, AssignedColumns::unknown());
+    }
+
+    public function testWithoutConsideringRowsAWriteNamesNoRows(): void
+    {
+        config(['model-cache.consider_rows' => false]);
+
+        $this->assertRowWrite([], DB::table('cars')->where('id', 1), Reflector::QUERY_TYPE_DELETE, AssignedColumns::none());
+    }
+
+    /**
+     * @param  array<string, ColumnKeys>  $columns
+     */
+    private function assertRowWrite(array $columns, Builder $query, string $type, AssignedColumns $assigned): void
+    {
+        $this->assertEquals([new RowWrite($this->database(), 'cars', $columns)], (new Tagger(new Reflector($query, $type, []), $assigned))->rowWrites());
+    }
+
+    private function database(): string
+    {
+        return DB::connection()->getDatabaseName();
     }
 }

@@ -187,7 +187,7 @@ Declare dependencies the schema does not show, such as tables written by stored 
 | `expiration_jitter`         | `MODEL_CACHE_EXPIRATION_JITTER`   | `15`           | Spreads each TTL randomly by up to this percentage in either direction. |
 | `max_entry_size`            | `MODEL_CACHE_MAX_ENTRY_SIZE`      | `8388608`      | Results larger than this many bytes are returned but not stored. `0` means no limit. |
 | `replica_lag`               | `MODEL_CACHE_REPLICA_LAG`         | `2`            | Seconds after a write during which reads of the table from a read replica are not stored. |
-| `consider_rows`             | `MODEL_CACHE_CONSIDER_ROWS`       | `true`         | Tag reads by primary key so writes invalidate only reads that can contain their rows. `false` tags whole tables. |
+| `consider_rows`             | `MODEL_CACHE_CONSIDER_ROWS`       | `true`         | Tag reads by the primary key the schema declares, so writes invalidate only reads that can contain their rows. `false` tags whole tables. |
 | `scope`                     | `MODEL_CACHE_SCOPE`               | `all`          | `all` caches every read on a caching connection, `models` only reads from models using `ModelCacheTrait`. |
 | `include_tables`            |                                   | `[]`           | When not empty, only queries whose tables are all listed are cached, and `exclude_tables` is ignored. |
 | `exclude_tables`            |                                   | `[]`           | Queries touching a listed table are not cached. |
@@ -265,7 +265,12 @@ Inside a transaction, the retire happens again at commit. A query that started b
 |---------------------------------------------------------------|-------------|
 | `update()` / `delete()` pinned to primary keys                | Reads that can contain those rows, plus table-wide reads |
 | `update()` / `delete()` with other conditions                 | Every read of the table |
-| `insert()`, `insertGetId()`, `insertOrIgnore()`, `upsert()`   | Table-wide reads and cached lookups of the inserted keys |
+| `insert()`, `insertGetId()`, `insertOrIgnore()`               | Table-wide reads and cached lookups of the inserted keys |
+| `upsert()`                                                    | Every read of the table |
+
+The primary key is the one the schema declares, read with the foreign keys, so every host, every model and every builder without one agrees on it. A model keyed by another column, such as a UUID next to an auto-increment `id`, pins no rows by that column; its reads by key are invalidated by every write to the table. A write pinned to the key that also assigns it invalidates the reads of the old and the new key.
+
+**Mixed releases share the cache safely.** During a rolling deploy, old and new releases of the application may define a model's key, table or relations differently. Row tags do not depend on any of these. The schema is read again after each migration, so a release whose models predate a migration still tags rows by the key the schema now declares.
 | `truncate()`                                                  | Every read of the table and of every table referencing it |
 | A write that affects no rows                                  | Its own table and statement-level triggers, but no foreign keys |
 
@@ -390,7 +395,7 @@ The cache pays off when the database is a server and the query does real work. S
 
 - Redis Cluster is not supported, because each operation is one Lua script that touches keys of several tags.
 - Writes that bypass Laravel's connection are not seen. This includes other applications, database consoles and `DB::connection()->getPdo()`. Use `model-cache:invalidate` or `model-cache:flush` after them.
-- Row-level tagging needs a single-column primary key. Composite keys fall back to table-level tags.
+- Row-level tagging needs a single-column primary key of an integer, decimal, text or UUID type. Composite keys and other types fall back to table-level tags, as do all reads before a write has read the schema in the current generation.
 - Third-party packages with their own query builder classes bypass the cache.
 - Two tables whose names differ only in case share their tags.
 

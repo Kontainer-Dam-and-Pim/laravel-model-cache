@@ -7,6 +7,7 @@ namespace Kontainer\ModelCache\Tests\Integration\Cache;
 use Illuminate\Support\Facades\DB;
 use Kontainer\ModelCache\CacheMiss;
 use Kontainer\ModelCache\Redis as CacheRedis;
+use Kontainer\ModelCache\Tagger;
 use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
 use Kontainer\ModelCache\Tests\TestCase;
 
@@ -35,6 +36,7 @@ class ConcurrencyTest extends TestCase
     public function testEvictedTagVersionMakesDependentEntriesMiss(): void
     {
         DB::table('cars')->insert(['id' => 911, 'name' => 'X', 'engine_id' => null, 'driver_id' => null]);
+        $this->loadDependencyMap();
         $builder = DB::table('cars')->where('id', 911);
         $builder->get();
         [$key, $tags] = $this->cacheKeyAndTags($builder);
@@ -42,7 +44,7 @@ class ConcurrencyTest extends TestCase
 
         $redis = new CacheRedis;
         $generation = (string) $redis->get($redis->prefix('generation'));
-        $redis->del($redis->prefix($generation.':v:'.$tags->tags[0]));
+        $redis->del($redis->prefix($generation.':v:'.Tagger::tableSpecificTagPrefix(DB::connection()->getDatabaseName()).'cars'.Tagger::ROW_INFIX.'911'));
 
         $this->assertCacheMissing($key, $tags);
     }

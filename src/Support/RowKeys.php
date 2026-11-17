@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Kontainer\ModelCache\Support;
 
 /**
- * Turns primary key values into row tag suffixes that are equal whenever the database could
- * consider the values equal, or gives up on row tags when it cannot guarantee that.
+ * Turns the values a column is compared with into keys that are equal whenever the database could
+ * consider the values equal, or gives up on keys when it cannot guarantee that.
  *
  * Integer keys compare numerically, so "05", 5 and 5.0 share one tag; any other value for an
  * integer key may be cast by the database (MySQL reads "5abc" as 5) and gives up. String keys
@@ -17,33 +17,6 @@ namespace Kontainer\ModelCache\Support;
 final class RowKeys
 {
     public const int MAX_PER_TABLE = 100;
-
-    /**
-     * @param  array<int|string, mixed>  $values
-     * @return list<string>|null null when row tags cannot represent the values safely
-     */
-    public static function canonical(array $values, bool $stringKeys): ?array
-    {
-        if (count($values) > self::MAX_PER_TABLE) {
-            return null;
-        }
-
-        $keys = [];
-        foreach ($values as $value) {
-            $key = $stringKeys ? self::stringKey($value) : self::integerKey($value);
-
-            if ($key === null) {
-                return null;
-            }
-
-            $keys[$key] = true;
-        }
-
-        $canonical = array_map('strval', array_keys($keys));
-        sort($canonical, SORT_STRING);
-
-        return $canonical;
-    }
 
     /**
      * Keys for the values a column of the type is compared with, such as a foreign key column

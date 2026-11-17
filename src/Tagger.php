@@ -4,19 +4,24 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache;
 
-use Kontainer\ModelCache\Support\AssignedRows;
-use Kontainer\ModelCache\Support\CascadeRead;
+use Kontainer\ModelCache\Support\AssignedColumns;
 use Kontainer\ModelCache\Support\ColumnKeys;
-use Kontainer\ModelCache\Support\RowKeys;
+use Kontainer\ModelCache\Support\RowWrite;
 use Kontainer\ModelCache\Support\TableName;
+use Kontainer\ModelCache\Support\TableRead;
 
 /**
- * Generates cache tags for queries based on database, tables, and targeted rows.
+ * Generates cache tags for queries based on database, tables, and the values their conditions
+ * pin columns to.
  *
- * A read pinned to rows carries `table_specific` and one tag per row; any other read carries
- * `table_unspecific`. A write bumps `table_unspecific` and the tags of the rows it pins or
- * assigns, or both table tags when it cannot name its rows. With `consider_rows` disabled
- * every query only uses `table_unspecific`.
+ * A read pinned to rows of a table's primary key carries `table_specific` and one tag per row;
+ * any other read carries `table_unspecific`. A write replaces `table_unspecific` and the tags of
+ * the rows it changes, or `table_specific` when it cannot name them. Which column is the primary
+ * key, and how its values compare, is read from the schema by the scripts (see
+ * `LuaScripts::LOOKUP` and `LuaScripts::INVALIDATE`), never from a model, so hosts whose models
+ * disagree about a table's key, such as old and new pods during a deploy, or a model and a
+ * builder without one, name its rows alike. With `consider_rows` disabled no read is pinned and
+ * every write replaces `table_specific`.
  */
 final readonly class Tagger
 {
@@ -26,59 +31,133 @@ final readonly class Tagger
 
     private const string PREFIX_TABLE_UNSPECIFIC = ':table_unspecific:';
 
-    private const string PREFIX_ROW = ':row:';
+    /**
+     * What follows a table's `table_specific` tag in the tag of one of its rows, followed by the
+     * row's key.
+     */
+    public const string ROW_INFIX = ':row:';
 
     private const string PREFIX_CASCADE = ':cascade:';
 
     private bool $considerRows;
 
+    private AssignedColumns $assigned;
+
     public function __construct(
         private Reflector $reflector,
-        private AssignedRows $assignedRows = new AssignedRows,
+        ?AssignedColumns $assigned = null,
     ) {
         $this->considerRows = (bool) config('model-cache.consider_rows', true);
+        $this->assigned = $assigned ?? AssignedColumns::none();
     }
 
     /**
+     * The tables of a read, with the values its wheres pin each column to when rows are considered.
+     *
+     * @return list<TableRead>
+     */
+    public function reads(): array
+    {
+        $reads = [];
+
+        foreach ($this->pinnedTables() as [$database, $name, $pins]) {
+            $reads[] = new TableRead($database, $name, $pins);
+        }
+
+        return $reads;
+    }
+
+    /**
+     * The tags a write replaces whatever rows it changes: `table_unspecific` of each table.
+     *
      * @return list<string>
      */
-    public function getTags(): array
+    public function writeTags(): array
     {
-        $tables = $this->reflector->getTables();
-        $pinnedRows = $this->considerRows ? $this->reflector->getRows() : [];
-        $type = $this->reflector->getType();
         $tags = [];
 
-        foreach ($tables as $table) {
+        foreach (array_filter($this->reflector->getTables(), 'is_string') as $table) {
             [$database, $name] = $this->locate($table);
-            $stringKeys = $this->reflector->usesStringKeys($table);
-            $pinned = $this->considerRows ? RowKeys::canonical($pinnedRows[$table] ?? [], $stringKeys) : null;
-            $assigned = $this->considerRows && $this->assignedRows->complete ? RowKeys::canonical($this->assignedRows->forTable($table), $stringKeys) : null;
-
-            foreach ($this->tableTags($type, $name, $pinned, $assigned) as $tag) {
-                $tags[self::PREFIX_DATABASE.$database.$tag] = true;
-            }
+            $tags[self::PREFIX_DATABASE.$database.self::PREFIX_TABLE_UNSPECIFIC.$name] = true;
         }
 
         return array_map('strval', array_keys($tags));
     }
 
     /**
-     * The tables of a read as foreign key cascades into them see it, with the values its wheres
-     * pin each column to when rows are considered.
+     * The tables a write changes, each with the columns whose values name every row it changed.
      *
-     * @return list<CascadeRead>
+     * @return list<RowWrite>
      */
-    public function cascadeReads(): array
+    public function rowWrites(): array
     {
-        $pins = $this->considerRows ? $this->reflector->getColumnPins() : [];
-        $reads = [];
+        $type = $this->reflector->getType();
+        $writes = [];
+
+        foreach ($this->pinnedTables() as [$database, $name, $pins, $table]) {
+            $columns = match (true) {
+                ! $this->considerRows => [],
+                $type === Reflector::QUERY_TYPE_INSERT => $this->assigned->insertedKeys($table),
+                $type === Reflector::QUERY_TYPE_UPDATE, $type === Reflector::QUERY_TYPE_DELETE => $this->reassignedPins($table, $pins),
+                default => [],
+            };
+
+            ksort($columns, SORT_STRING);
+            $writes[$database."\0".$name] = new RowWrite($database, $name, $columns);
+        }
+
+        return array_values($writes);
+    }
+
+    /**
+     * The pinned columns that still name every changed row after the write: those it does not
+     * assign, and those it assigns keyed values, whose keys are added.
+     *
+     * @param  array<string, ColumnKeys>  $pins
+     * @return array<string, ColumnKeys>
+     */
+    private function reassignedPins(string $table, array $pins): array
+    {
+        if (! $this->assigned->isKnown()) {
+            return [];
+        }
+
+        $columns = [];
+
+        foreach ($pins as $column => $keys) {
+            if (! $this->assigned->assigns($table, $column)) {
+                $columns[$column] = $keys;
+
+                continue;
+            }
+
+            $assigned = $this->assigned->keysOf($table, $column);
+            $merged = $assigned === null ? null : $keys->merge($assigned);
+
+            if ($merged !== null && ! $merged->isEmpty()) {
+                $columns[$column] = $merged;
+            }
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Each table of the query with its database, tagged name, the keys of the values its columns
+     * are pinned to, and its name as the query writes it.
+     *
+     * @return list<array{string, string, array<string, ColumnKeys>, string}>
+     */
+    private function pinnedTables(): array
+    {
+        $pinned = $this->considerRows ? $this->reflector->getColumnPins() : [];
+        $tables = [];
 
         foreach (array_filter($this->reflector->getTables(), 'is_string') as $table) {
             [$database, $name] = $this->locate($table);
             $columns = [];
 
-            foreach ($pins[$table] ?? [] as $column => $values) {
+            foreach ($pinned[$table] ?? [] as $column => $values) {
                 $keys = ColumnKeys::of($values);
                 if (! $keys->isEmpty()) {
                     $columns[$column] = $keys;
@@ -86,10 +165,10 @@ final readonly class Tagger
             }
 
             ksort($columns, SORT_STRING);
-            $reads[] = new CascadeRead($database, $name, self::cascadeTagPrefix($database).$name.':', $columns);
+            $tables[] = [$database, $name, $columns, $table];
         }
 
-        return $reads;
+        return $tables;
     }
 
     /**
@@ -99,6 +178,23 @@ final readonly class Tagger
     public static function cascadeTagPrefix(string $database): string
     {
         return self::PREFIX_DATABASE.$database.self::PREFIX_CASCADE;
+    }
+
+    /**
+     * Prefix of the `table_specific` tag of a table and of the tags of its rows, followed by the
+     * table name.
+     */
+    public static function tableSpecificTagPrefix(string $database): string
+    {
+        return self::PREFIX_DATABASE.$database.self::PREFIX_TABLE_SPECIFIC;
+    }
+
+    /**
+     * Prefix of the `table_unspecific` tag of a table, followed by the table name.
+     */
+    public static function tableUnspecificTagPrefix(string $database): string
+    {
+        return self::PREFIX_DATABASE.$database.self::PREFIX_TABLE_UNSPECIFIC;
     }
 
     /**
@@ -131,14 +227,12 @@ final readonly class Tagger
      */
     public static function tableWideTagPrefixes(string $database): array
     {
-        $databaseTag = self::PREFIX_DATABASE.$database;
-
-        return [$databaseTag.self::PREFIX_TABLE_SPECIFIC, $databaseTag.self::PREFIX_TABLE_UNSPECIFIC];
+        return [self::tableSpecificTagPrefix($database), self::tableUnspecificTagPrefix($database)];
     }
 
     /**
-     * Tags invalidating every cached read of the query's tables, a superset of what getTags()
-     * invalidates for any write to them.
+     * Tags invalidating every cached read of the query's tables, a superset of what any write to
+     * them invalidates.
      *
      * @return list<string>
      */
@@ -155,37 +249,5 @@ final readonly class Tagger
         }
 
         return array_map('strval', array_keys($tags));
-    }
-
-    /**
-     * @param  list<string>|null  $pinned  rows the query's conditions restrict it to; null when unrepresentable
-     * @param  list<string>|null  $assigned  rows the write assigns keys to; null when unknown or unrepresentable
-     * @return list<string>
-     */
-    private function tableTags(string $type, string $table, ?array $pinned, ?array $assigned): array
-    {
-        $specific = self::PREFIX_TABLE_SPECIFIC.$table;
-        $unspecific = self::PREFIX_TABLE_UNSPECIFIC.$table;
-        $isPinned = $pinned !== null && $pinned !== [];
-
-        return match ($type) {
-            Reflector::QUERY_TYPE_SELECT => $isPinned ? [$specific, ...$this->rowTags($table, $pinned)] : [$unspecific],
-            Reflector::QUERY_TYPE_UPDATE, Reflector::QUERY_TYPE_DELETE => $isPinned && $assigned !== null
-                ? [$unspecific, ...$this->rowTags($table, [...$pinned, ...$assigned])]
-                : [$specific, $unspecific],
-            Reflector::QUERY_TYPE_INSERT => $assigned !== null
-                ? [$unspecific, ...$this->rowTags($table, $assigned)]
-                : [$specific, $unspecific],
-            default => [$specific, $unspecific],
-        };
-    }
-
-    /**
-     * @param  list<string>  $keys
-     * @return list<string>
-     */
-    private function rowTags(string $table, array $keys): array
-    {
-        return array_map(static fn (string $key): string => self::PREFIX_TABLE_SPECIFIC.$table.self::PREFIX_ROW.$key, $keys);
     }
 }

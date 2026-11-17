@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace Kontainer\ModelCache\Tests\Integration\QueryBuilder;
 
 use Illuminate\Support\Facades\DB;
-use Kontainer\ModelCache\Reflector;
-use Kontainer\ModelCache\Tagger;
 use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
 use Kontainer\ModelCache\Tests\TestCase;
 
@@ -26,10 +24,9 @@ class RawExpressionsTest extends TestCase
             ->where('cars.id', 201)
             ->select('cars.*');
 
-        // Assert Tagger (main query) produces specific for cars (row-scoped) and unspecific for engines (broad)
-        $reflector = new Reflector($builder);
-        $dbName = $reflector->getDatabase();
-        $tags = (new Tagger($reflector))->getTags();
+        $this->loadDependencyMap();
+        $dbName = DB::connection()->getDatabaseName();
+        $tags = $this->resolvedReadTags($builder);
         $this->assertContains("tags:database:{$dbName}:table_specific:cars", $tags);
         $this->assertContains("tags:database:{$dbName}:table_unspecific:engines", $tags);
     }
@@ -46,11 +43,9 @@ class RawExpressionsTest extends TestCase
             ->select('cars.*')
             ->selectSub($sub, 'driver_id_sub');
 
-        // Assert Tagger (main query) produces cars tag; since it's row-scoped it is specific.
-        // Subquery tags are propagated during caching, not by Tagger here.
-        $reflector = new Reflector($builder);
-        $dbName = $reflector->getDatabase();
-        $tags = (new Tagger($reflector))->getTags();
+        $this->loadDependencyMap();
+        $dbName = DB::connection()->getDatabaseName();
+        $tags = $this->resolvedReadTags($builder);
         $this->assertContains("tags:database:{$dbName}:table_specific:cars", $tags);
     }
 }
