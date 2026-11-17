@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## [Unreleased]
+### Fixed
+- A failed invalidation of a delete pinned to key values, shared through APCu, could not be replayed by the next request: its keys unserialized as an incomplete class, so every replay failed, reads bypassed the cache until the shared entry expired, and the invalidation was then dropped without reaching Redis, leaving the entries it should have invalidated reachable
+
 ## [1.0.1] - 2026-11-16
 ### Fixed
 - Raw multi-table `DELETE ... USING` on SQLite and reads with `CONNECT BY`/`START WITH` on SQL Server failed to parse, so they retired the whole cache or ran uncached; they are now parsed as sqlparser-rs parses them

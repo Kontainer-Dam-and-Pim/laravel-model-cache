@@ -20,6 +20,12 @@ final readonly class Invalidation
     public const int MAX_TAGS = 1000;
 
     /**
+     * Every class a serialized invalidation holds, for unserializing it with no other class
+     * allowed.
+     */
+    public const array SERIALIZED_CLASSES = [self::class, ColumnKeys::class];
+
+    /**
      * @param  array<string, true>  $tags
      * @param  array<string, true>|null  $coverage  table-wide tags invalidating everything $tags does; null when unknown
      * @param  array<string, array<string, true>>  $cascadeSources  database => `Write::dependentsFields()` of each written table

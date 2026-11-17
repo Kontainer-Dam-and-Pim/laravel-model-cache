@@ -81,7 +81,7 @@ final class FailedInvalidations
 
             foreach (new APCUIterator('/^'.preg_quote($this->itemPrefix(), '/').'/', APC_ITER_VALUE) as $key => $item) {
                 $value = is_array($item) ? $item['value'] ?? null : null;
-                $invalidation = is_string($value) ? @unserialize($value, ['allowed_classes' => [Invalidation::class]]) : null;
+                $invalidation = is_string($value) ? @unserialize($value, ['allowed_classes' => Invalidation::SERIALIZED_CLASSES]) : null;
                 $merged = self::bounded($merged->merge($invalidation instanceof Invalidation ? $invalidation : Invalidation::everything()));
                 $sharedKeys[] = $key;
             }
