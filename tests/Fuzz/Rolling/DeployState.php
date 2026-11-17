@@ -67,6 +67,14 @@ final readonly class DeployState
         };
     }
 
+    /**
+     * The state once every pod committed the transactions it left open.
+     */
+    public function settled(): self
+    {
+        return new self($this->pods, null, 0, $this->schema, $this->redisDown);
+    }
+
     public function after(Step $step): self
     {
         if ($step instanceof MigrateStep) {

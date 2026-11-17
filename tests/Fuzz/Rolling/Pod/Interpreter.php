@@ -46,6 +46,14 @@ final readonly class Interpreter
     }
 
     /**
+     * The read through the cache only, as the application runs it.
+     */
+    public function cachedRead(Read $read): mixed
+    {
+        return $this->runRead($read, true);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function write(Write $write): array
@@ -75,6 +83,23 @@ final readonly class Interpreter
             TransactionAction::Begin => DB::beginTransaction(),
             TransactionAction::Commit => DB::commit(),
             TransactionAction::Rollback => DB::rollBack(),
+        });
+    }
+
+    /**
+     * Commits every transaction the pod left open.
+     *
+     * @return array<string, mixed>
+     */
+    public function settle(): array
+    {
+        return self::outcome(static function (): int {
+            $levels = DB::transactionLevel();
+            while (DB::transactionLevel() > 0) {
+                DB::commit();
+            }
+
+            return $levels;
         });
     }
 

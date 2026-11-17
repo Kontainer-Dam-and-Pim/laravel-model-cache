@@ -45,6 +45,12 @@ final class Server
                 isset($message['read']) => $interpreter->read(Read::fromArray($message['read'])),
                 isset($message['write']) => $interpreter->write(Write::fromArray($message['write'])),
                 isset($message['transaction']) => $interpreter->transaction(TransactionAction::from($message['transaction'])),
+                isset($message['batch']) => array_map(static fn (array $step): array => match (true) {
+                    isset($step['read']) => $interpreter->read(Read::fromArray($step['read'])),
+                    isset($step['write']) => $interpreter->write(Write::fromArray($step['write'])),
+                    default => $interpreter->transaction(TransactionAction::from($step['transaction'])),
+                }, $message['batch']),
+                isset($message['settle']) => $interpreter->settle(),
                 isset($message['connectivity']) => (static function () use ($outage, $message): array {
                     Connectivity::from($message['connectivity']) === Connectivity::Lost ? $outage->begin() : $outage->end();
 

@@ -52,13 +52,32 @@ final class PodProcess
      */
     public function send(array $message): array
     {
+        $this->dispatch($message);
+
+        return $this->receive();
+    }
+
+    /**
+     * Sends a message without waiting for the reply, which `receive()` reads, so several pods
+     * can work at once.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    public function dispatch(array $message): void
+    {
         fwrite($this->pipes[0], json_encode($message, JSON_THROW_ON_ERROR)."\n");
         fflush($this->pipes[0]);
+    }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function receive(): array
+    {
         $read = [$this->pipes[1]];
         $none = [];
         if (stream_select($read, $none, $none, self::REPLY_TIMEOUT_SECONDS) !== 1 || ($line = fgets($this->pipes[1])) === false) {
-            throw new RuntimeException("Pod {$this->name} gave no reply to ".json_encode($message)."\n".$this->errors());
+            throw new RuntimeException("Pod {$this->name} gave no reply\n".$this->errors());
         }
 
         try {
