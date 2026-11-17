@@ -98,7 +98,7 @@ final readonly class SchemaGenerator
         $parent = $this->dice->pick($this->dataTables($schema));
         $parentColumns = $parent->unique !== [] && $this->dice->chance(30) ? [$this->dice->pick($parent->unique)] : $parent->primaryKey;
         $parentNullable = array_filter($parentColumns, static fn (string $column): bool => $parent->column($column)->nullable) !== [];
-        $name = $this->nextName('fk', array_keys($schema->foreignKeys));
+        $name = $this->nextName('fk', [...array_keys($schema->foreignKeys), ...self::foreignKeyNamesOfColumns($schema)]);
         $nullable = $holdsRows || self::requires($schema, $parent->name, $child) || $this->dice->chance(60);
         $setsDefault = ! $holdsRows && $this->dice->chance(20);
         $allowed = $this->allowedRules($parentNullable, $nullable, $setsDefault);
@@ -144,6 +144,26 @@ final readonly class SchemaGenerator
         }
 
         return false;
+    }
+
+    /**
+     * The names of foreign keys whose columns a table still has, from `<name>_<column>`, which a
+     * new key must not reuse: the old values in them need not satisfy it.
+     *
+     * @return list<string>
+     */
+    private static function foreignKeyNamesOfColumns(Schema $schema): array
+    {
+        $names = [];
+        foreach ($schema->tables as $table) {
+            foreach ($table->columnNames() as $column) {
+                if (preg_match('/^(fk\d+)_/', $column, $match) === 1) {
+                    $names[] = $match[1];
+                }
+            }
+        }
+
+        return $names;
     }
 
     /**

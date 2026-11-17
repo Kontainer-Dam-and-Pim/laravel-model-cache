@@ -45,12 +45,7 @@ final class Server
                 isset($message['read']) => $interpreter->read(Read::fromArray($message['read'])),
                 isset($message['write']) => $interpreter->write(Write::fromArray($message['write'])),
                 isset($message['transaction']) => $interpreter->transaction(TransactionAction::from($message['transaction'])),
-                isset($message['batch']) => array_map(static fn (array $step): array => match (true) {
-                    isset($step['read']) => $interpreter->read(Read::fromArray($step['read'])),
-                    isset($step['write']) => $interpreter->write(Write::fromArray($step['write'])),
-                    default => $interpreter->transaction(TransactionAction::from($step['transaction'])),
-                }, $message['batch']),
-                isset($message['settle']) => $interpreter->settle(),
+                isset($message['batch']) => self::batch($interpreter, $message['batch']),
                 isset($message['connectivity']) => (static function () use ($outage, $message): array {
                     Connectivity::from($message['connectivity']) === Connectivity::Lost ? $outage->begin() : $outage->end();
 
@@ -63,6 +58,25 @@ final class Server
         $app->terminate();
 
         return 0;
+    }
+
+    /**
+     * Runs the steps in order, then commits what they left open, as a request ends, so the pod
+     * holds no locks while it waits for the others.
+     *
+     * @param  list<array<string, mixed>>  $steps
+     * @return list<array<string, mixed>>
+     */
+    private static function batch(Interpreter $interpreter, array $steps): array
+    {
+        $outcomes = array_map(static fn (array $step): array => match (true) {
+            isset($step['read']) => $interpreter->read(Read::fromArray($step['read'])),
+            isset($step['write']) => $interpreter->write(Write::fromArray($step['write'])),
+            default => $interpreter->transaction(TransactionAction::from($step['transaction'])),
+        }, $steps);
+        $interpreter->settle();
+
+        return $outcomes;
     }
 
     /**

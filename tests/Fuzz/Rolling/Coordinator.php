@@ -79,8 +79,8 @@ final class Coordinator
 
     /**
      * Runs the reads and writes between two other steps on all pods at once, each pod its own in
-     * order, so they race as pods serving requests do. Then every pod commits what it left open
-     * and reads again what it read, which must match the database once writes have settled.
+     * order and then committing what it left open, so they race as pods serving requests do. Then
+     * every pod reads again what it read, which must match the database once writes have settled.
      *
      * @throws StaleRead
      */
@@ -133,10 +133,6 @@ final class Coordinator
             foreach (array_keys($steps) as $position => $index) {
                 $this->record($index, $steps[$index], $outcomes[$position], false);
             }
-        }
-
-        foreach ($this->pods as $pod) {
-            $pod->send(['settle' => true]);
         }
 
         foreach ($segment as $pod => $steps) {
