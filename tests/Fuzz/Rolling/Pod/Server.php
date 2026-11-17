@@ -7,6 +7,7 @@ namespace Kontainer\ModelCache\Tests\Fuzz\Rolling\Pod;
 use Illuminate\Support\Facades\DB;
 use Kontainer\ModelCache\ModelCacheServiceProvider;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\App\Release;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Connectivity;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Read;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\TransactionAction;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Write;
@@ -36,6 +37,7 @@ final class Server
         eval(ModelSource::of($release));
         self::limitLockWaits();
         $interpreter = new Interpreter($release);
+        $outage = new Outage;
         self::send($output, ['ready' => getmypid()]);
 
         while (($message = self::receive($input)) !== null) {
@@ -43,6 +45,11 @@ final class Server
                 isset($message['read']) => $interpreter->read(Read::fromArray($message['read'])),
                 isset($message['write']) => $interpreter->write(Write::fromArray($message['write'])),
                 isset($message['transaction']) => $interpreter->transaction(TransactionAction::from($message['transaction'])),
+                isset($message['connectivity']) => (static function () use ($outage, $message): array {
+                    Connectivity::from($message['connectivity']) === Connectivity::Lost ? $outage->begin() : $outage->end();
+
+                    return ['result' => true];
+                })(),
                 default => throw new UnexpectedValueException('Unknown pod message '.json_encode($message)),
             });
         }

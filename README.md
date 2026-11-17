@@ -251,7 +251,7 @@ Inside a transaction, the retire happens again at commit. A query that started b
 
 **Redis failures never break database access.** A failed cache operation is logged and the query runs against the database. After a failure, Redis is skipped for 30 seconds. That skip lasts the worker's lifetime under Octane or FrankenPHP, and is shared across PHP-FPM processes through APCu when it is installed.
 
-**Failed invalidations are replayed.** An invalidation Redis rejects is kept and logged as an error, and reads bypass the cache until it is replayed. Replay happens before the cache is used again, and again when the request, job or worker ends. Under PHP-FPM, pending invalidations are shared through APCu. Very large backlogs retire the whole cache instead.
+**Failed invalidations are replayed.** An invalidation Redis rejects is kept and logged as an error, and that host's reads bypass the cache until it is replayed. Hosts that still reach Redis do not learn of it in the meantime (see [Limitations](#limitations)). Replay happens before the cache is used again, and again when the request, job or worker ends. Under PHP-FPM, pending invalidations are shared through APCu. Very large backlogs retire the whole cache instead.
 
 **A replaced Redis server is detected.** A restarted server or a promoted replica may have lost recent invalidations. The cache records the server's run id and retires the generation the first time a store or invalidation reaches a different server. Lookups check this on each process's first lookup and then every 5 seconds.
 
@@ -394,6 +394,7 @@ The cache pays off when the database is a server and the query does real work. S
 ## Limitations
 
 - Redis Cluster is not supported, because each operation is one Lua script that touches keys of several tags.
+- A host that cannot reach Redis while other hosts can, as in a network partition, cannot invalidate their entries. Its own reads bypass the cache until it replays the invalidations Redis rejected, but other hosts keep serving what they cached of the tables it wrote until then, or until those entries expire. Invalidations a host still holds when it stops before Redis answers again are lost. Run `model-cache:flush` after such an outage.
 - Writes that bypass Laravel's connection are not seen. This includes other applications, database consoles and `DB::connection()->getPdo()`. Use `model-cache:invalidate` or `model-cache:flush` after them.
 - Row-level tagging needs a single-column primary key of an integer, decimal, text or UUID type. Composite keys and other types fall back to table-level tags, as do all reads before a write has read the schema in the current generation.
 - Third-party packages with their own query builder classes bypass the cache.

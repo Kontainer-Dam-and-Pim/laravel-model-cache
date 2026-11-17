@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache\Tests\Fuzz;
 
+use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\DB;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Coordinator;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Plan;
@@ -14,6 +15,7 @@ use Kontainer\ModelCache\Tests\Fuzz\Rolling\Shrinker;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\StaleRead;
 use Kontainer\ModelCache\Tests\Fuzz\Support\FuzzEnvironment;
 use Kontainer\ModelCache\Tests\TestCase;
+use Orchestra\Testbench\Attributes\DefineEnvironment;
 
 /**
  * Pods of successive releases of an application share one database and one Redis through
@@ -62,6 +64,27 @@ final class RollingDeployFuzzTest extends TestCase
     }
 
     public function testEveryPodReadsWhatTheDatabaseHoldsThroughRollingDeploys(): void
+    {
+        $this->runDeploys();
+    }
+
+    #[DefineEnvironment('usePrefixedTables')]
+    public function testEveryPodReadsWhatTheDatabaseHoldsThroughRollingDeploysOfPrefixedTables(): void
+    {
+        $this->runDeploys();
+    }
+
+    /**
+     * @param  Application  $app
+     */
+    protected function usePrefixedTables($app): void
+    {
+        $connection = (string) $app['config']->get('database.default');
+        $app['config']->set("database.connections.{$connection}.prefix", 'lc_');
+        $app['config']->set("database.connections.{$connection}.prefix_indexes", true);
+    }
+
+    private function runDeploys(): void
     {
         $replay = getenv('MODEL_CACHE_FUZZ_PLAN');
 

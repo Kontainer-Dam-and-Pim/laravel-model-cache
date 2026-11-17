@@ -7,6 +7,7 @@ namespace Kontainer\ModelCache\Tests\Fuzz\Rolling;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis as RedisFacade;
 use Kontainer\ModelCache\Services;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Connectivity;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Disturbance;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\DisturbStep;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Lifecycle;
@@ -101,7 +102,7 @@ final class Coordinator
     {
         match (true) {
             $step instanceof PodStep => $this->podStep($index, $step),
-            $step instanceof LifecycleStep => $this->lifecycle($index, $step),
+            $step instanceof LifecycleStep => $this->lifecycle($index, $step, $state->redisDown),
             $step instanceof MigrateStep => $this->migrate($index, $step, $state, $writer),
             $step instanceof DisturbStep => $this->disturb($index, $step),
         };
@@ -150,19 +151,44 @@ final class Coordinator
         }
     }
 
-    private function lifecycle(int $index, LifecycleStep $step): void
+    /**
+     * A pod starting while Redis is down starts without it.
+     */
+    private function lifecycle(int $index, LifecycleStep $step, bool $redisDown): void
     {
         $this->log($index, $step, 'ok');
-        $release = $this->plan->release($step->lifecycle === Lifecycle::Start ? $step->release : $this->pods[$step->pod]->release);
+        $previous = $this->pods[$step->pod] ?? null;
+        $release = $this->plan->release($previous?->release ?? $step->release);
+        $secondConnection = $previous?->secondConnection ?? $step->secondConnection;
 
-        if ($step->lifecycle !== Lifecycle::Start) {
-            $this->pods[$step->pod]->stop();
+        if ($previous !== null) {
+            $previous->stop();
             unset($this->pods[$step->pod]);
         }
 
-        if ($step->lifecycle !== Lifecycle::Stop) {
-            $this->pods[$step->pod] = PodProcess::start($step->pod, $release, [...$this->config, 'model-cache' => [...$this->config['model-cache'], ...$release->config]]);
+        if ($step->lifecycle === Lifecycle::Stop) {
+            return;
         }
+
+        $default = (string) $this->config['database.default'];
+        $this->pods[$step->pod] = PodProcess::start($step->pod, $release, $secondConnection, [
+            ...$this->config,
+            'database.default' => $secondConnection ? self::secondConnection($default) : $default,
+            'database.connections.'.self::secondConnection($default) => $this->config["database.connections.{$default}"],
+            'model-cache' => [...$this->config['model-cache'], ...$release->config],
+        ]);
+
+        if ($redisDown) {
+            $this->pods[$step->pod]->send(['connectivity' => Connectivity::Lost->value]);
+        }
+    }
+
+    /**
+     * The name of a second connection to the same database as the one named.
+     */
+    private static function secondConnection(string $connection): string
+    {
+        return "{$connection}_second";
     }
 
     private function migrate(int $index, MigrateStep $step, DeployState $state, SchemaWriter $writer): void
@@ -176,7 +202,11 @@ final class Coordinator
     {
         $connection = RedisFacade::connection((string) config('model-cache.redis_connection'));
 
-        if ($step->disturbance === Disturbance::Flush) {
+        if ($step->disturbance === Disturbance::Outage || $step->disturbance === Disturbance::Recovery) {
+            foreach ($this->pods as $pod) {
+                $pod->send(['connectivity' => ($step->disturbance === Disturbance::Outage ? Connectivity::Lost : Connectivity::Restored)->value]);
+            }
+        } elseif ($step->disturbance === Disturbance::Flush) {
             Services::cache()->flush();
         } elseif ($step->disturbance === Disturbance::Empty) {
             $connection->flushdb();

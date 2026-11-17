@@ -22,6 +22,7 @@ final class PodProcess
     private function __construct(
         public readonly string $name,
         public readonly int $release,
+        public readonly bool $secondConnection,
         private $process,
         private array $pipes,
         private readonly string $errorLog,
@@ -30,7 +31,7 @@ final class PodProcess
     /**
      * @param  array<string, mixed>  $config  configuration the pod's application is booted with
      */
-    public static function start(string $name, Release $release, array $config): self
+    public static function start(string $name, Release $release, bool $secondConnection, array $config): self
     {
         $errorLog = (string) tempnam(sys_get_temp_dir(), "model-cache-pod-{$name}-");
         $process = proc_open([PHP_BINARY, '-d', 'display_errors=stderr', __DIR__.'/pod.php'], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $errorLog, 'w']], $pipes);
@@ -39,7 +40,7 @@ final class PodProcess
             throw new RuntimeException("Could not start pod {$name}");
         }
 
-        $pod = new self($name, $release->number, $process, [$pipes[0], $pipes[1]], $errorLog);
+        $pod = new self($name, $release->number, $secondConnection, $process, [$pipes[0], $pipes[1]], $errorLog);
         $pod->send(['config' => $config, 'release' => $release->toArray()]);
 
         return $pod;
