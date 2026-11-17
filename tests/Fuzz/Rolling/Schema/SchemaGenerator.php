@@ -89,7 +89,9 @@ final readonly class SchemaGenerator
     /**
      * Adds a foreign key from new columns of the child to the primary key or a unique column of
      * a random table, which may be the child itself. Columns added to a table that may hold rows
-     * are nullable without a default, as a migration must add them for its rows to satisfy the key.
+     * are nullable without a default, as a migration must add them for its rows to satisfy the key,
+     * and so are columns of a key that would close a cycle of keys every row must satisfy, which no
+     * row could be inserted into.
      */
     private function withForeignKey(Schema $schema, string $child, bool $holdsRows): Schema
     {
@@ -97,7 +99,7 @@ final readonly class SchemaGenerator
         $parentColumns = $parent->unique !== [] && $this->dice->chance(30) ? [$this->dice->pick($parent->unique)] : $parent->primaryKey;
         $parentNullable = array_filter($parentColumns, static fn (string $column): bool => $parent->column($column)->nullable) !== [];
         $name = $this->nextName('fk', array_keys($schema->foreignKeys));
-        $nullable = $holdsRows || $this->dice->chance(60);
+        $nullable = $holdsRows || self::requires($schema, $parent->name, $child) || $this->dice->chance(60);
         $setsDefault = ! $holdsRows && $this->dice->chance(20);
         $allowed = $this->allowedRules($parentNullable, $nullable, $setsDefault);
         $onDelete = $this->dice->pick($allowed);
@@ -115,6 +117,33 @@ final readonly class SchemaGenerator
         $schema = $schema->withTable($table);
 
         return $schema->withForeignKey(new ForeignKey($name, $child, $childColumns, $parent->name, $parentColumns, $onDelete, $onUpdate));
+    }
+
+    /**
+     * Whether every row of the table must reference a row of the other, through foreign keys
+     * without nullable columns, directly or through tables in between. A table requires itself.
+     */
+    public static function requires(Schema $schema, string $table, string $other): bool
+    {
+        $reached = [$table => true];
+        $pending = [$table];
+
+        while ($pending !== []) {
+            $current = array_pop($pending);
+
+            if ($current === $other) {
+                return true;
+            }
+
+            foreach ($schema->foreignKeysOf($current) as $foreignKey) {
+                if (! isset($reached[$foreignKey->parent]) && ! $schema->table($current)->column($foreignKey->childColumns[0])->nullable) {
+                    $reached[$foreignKey->parent] = true;
+                    $pending[] = $foreignKey->parent;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

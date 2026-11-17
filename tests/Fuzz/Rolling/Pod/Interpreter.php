@@ -17,9 +17,12 @@ use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Api;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Condition;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Operator;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Read;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\ReadShape;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\TransactionAction;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Write;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\WriteKind;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\SchemaGenerator;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Table;
 use PDOException;
 
 /**
@@ -32,18 +35,13 @@ final readonly class Interpreter
     public function __construct(private Release $release) {}
 
     /**
-     * Inside a transaction each run of the read has a savepoint of its own, so one rejected on
-     * PostgreSQL does not abort the transaction for the other.
-     *
      * @return array{cached: array<string, mixed>, database: array<string, mixed>}
      */
     public function read(Read $read): array
     {
-        $isolated = static fn (Closure $run): Closure => DB::transactionLevel() > 0 ? static fn (): mixed => DB::transaction($run) : $run;
-
         return [
-            'cached' => self::outcome($isolated(fn (): mixed => $this->runRead($read, true))),
-            'database' => self::outcome($isolated(fn (): mixed => $this->runRead($read, false))),
+            'cached' => self::outcome(self::isolated(fn (): mixed => $this->runRead($read, true))),
+            'database' => self::outcome(self::isolated(fn (): mixed => $this->runRead($read, false))),
         ];
     }
 
@@ -52,7 +50,20 @@ final readonly class Interpreter
      */
     public function write(Write $write): array
     {
-        return self::outcome(fn (): mixed => $this->runWrite($write));
+        return self::outcome(self::isolated(fn (): mixed => $this->runWrite($write)));
+    }
+
+    /**
+     * Inside a transaction a statement runs in a savepoint of its own, as code catching a failed
+     * statement in a nested `DB::transaction()` does, so one rejected on PostgreSQL does not
+     * abort the transaction for those after it.
+     *
+     * @param  Closure(): mixed  $run
+     * @return Closure(): mixed
+     */
+    private static function isolated(Closure $run): Closure
+    {
+        return DB::transactionLevel() > 0 ? static fn (): mixed => DB::transaction($run) : $run;
     }
 
     /**
@@ -85,35 +96,120 @@ final readonly class Interpreter
     private function runRead(Read $read, bool $cached): mixed
     {
         if ($read->api === Api::Model) {
-            $query = $this->modelQuery($read->relation, $cached);
-            $this->applyConditions($query, $read->conditions, $read->or, $read->relation, true);
-
-            if ($read->with !== null) {
-                $query->with([$read->with => static fn (Relation $relation) => $cached ? $relation : $relation->withoutCache()]);
-            }
-
-            return $read->count ? $query->count() : self::canonical($query->get()->toArray());
+            return $this->runModelRead($read, $cached);
         }
 
-        $query = DB::table($read->relation);
-        if (! $cached) {
-            $query->withoutCache();
+        if ($read->shape === ReadShape::GroupedChildCounts) {
+            return $this->runGroupedChildCounts($read, $cached);
         }
 
-        if ($read->join !== null) {
-            $foreignKey = $this->release->schema->foreignKey($read->join);
-            $query->join("{$foreignKey->parent} as joined_parent", function ($join) use ($foreignKey, $read): void {
-                foreach ($foreignKey->childColumns as $index => $column) {
-                    $join->on("{$read->relation}.{$column}", '=', "joined_parent.{$foreignKey->parentColumns[$index]}");
-                }
-            })->select("{$read->relation}.*", 'joined_parent.label as parent_label');
-        }
+        $query = $this->table($read->relation, $cached);
+        $joins = in_array($read->shape, [ReadShape::JoinParent, ReadShape::JoinedChildCounts], true);
+        $this->shape($query, $read);
 
         $read->api === Api::Raw
-            ? $this->applyRawConditions($query, $read->conditions, $read->or, $read->join === null ? null : $read->relation)
-            : $this->applyConditions($query, $read->conditions, $read->or, $read->join === null ? null : $read->relation, false);
+            ? $this->applyRawConditions($query, $read->conditions, $read->or, $joins ? $read->relation : null)
+            : $this->applyConditions($query, $read->conditions, $read->or, $joins ? $read->relation : null, false);
 
-        return $read->count ? $query->count() : self::canonical($query->get()->all());
+        return match ($read->shape) {
+            ReadShape::Count => $query->count(),
+            ReadShape::Sum => $query->sum('amount'),
+            ReadShape::Max => $query->max('amount'),
+            default => self::canonical($query->get()->all()),
+        };
+    }
+
+    private function runModelRead(Read $read, bool $cached): mixed
+    {
+        $query = $this->modelQuery($read->relation, $cached);
+        $this->applyConditions($query, $read->conditions, $read->or, $read->relation, true);
+        $relation = (string) $read->subject;
+
+        match ($read->shape) {
+            ReadShape::EagerLoad => $query->with([$relation => static fn (Relation $related) => $cached ? $related : $related->withoutCache()]),
+            ReadShape::WithCount => $query->withCount($relation),
+            ReadShape::WhereHas => $query->whereHas($relation, static fn (EloquentBuilder $related) => $related->where('label', $read->label)),
+            default => null,
+        };
+
+        return $read->shape === ReadShape::Count ? $query->count() : self::canonical($query->get()->toArray());
+    }
+
+    /**
+     * Applies the shape's joins, subqueries and selects to a builder read of its table.
+     */
+    private function shape(Builder $query, Read $read): void
+    {
+        $table = $read->relation;
+
+        if (! $read->shape->namesForeignKey() && $read->shape !== ReadShape::Union) {
+            return;
+        }
+
+        if ($read->shape === ReadShape::Union) {
+            $query->select('label')->union($this->table((string) $read->subject, true)->select('label'));
+
+            return;
+        }
+
+        $foreignKey = $this->release->schema->foreignKey((string) $read->subject);
+        $grammar = DB::connection()->getQueryGrammar();
+        $children = fn (): Builder => $this->table("{$foreignKey->child} as children", true)->whereColumn("children.{$foreignKey->childColumns[0]}", "{$table}.{$foreignKey->parentColumns[0]}");
+        $rawChildren = "from {$grammar->wrapTable("{$foreignKey->child} as children")} where {$grammar->wrap("children.{$foreignKey->childColumns[0]}")} = {$grammar->wrap("{$table}.{$foreignKey->parentColumns[0]}")}";
+
+        match ($read->shape) {
+            ReadShape::JoinParent => $query->join("{$foreignKey->parent} as joined_parent", function ($join) use ($foreignKey, $table): void {
+                foreach ($foreignKey->childColumns as $index => $column) {
+                    $join->on("{$table}.{$column}", '=', "joined_parent.{$foreignKey->parentColumns[$index]}");
+                }
+            })->select("{$table}.*", 'joined_parent.label as parent_label'),
+            ReadShape::ChildrenOfLabelledParents => $query->whereIn(
+                "{$table}.{$foreignKey->childColumns[0]}",
+                $this->table($foreignKey->parent, true)->select($foreignKey->parentColumns[0])->where('label', $read->label),
+            ),
+            ReadShape::ParentsWithChildren => $query->whereExists(static fn (Builder $exists) => $exists->select(DB::raw(1))->from("{$foreignKey->child} as children")->whereColumn("children.{$foreignKey->childColumns[0]}", "{$table}.{$foreignKey->parentColumns[0]}")),
+            ReadShape::ChildCounts => $query->select("{$table}.*")->selectSub($children()->selectRaw('count(*)'), 'child_count'),
+            ReadShape::JoinedChildCounts => $query->joinSub(
+                $this->table($foreignKey->child, true)->select($foreignKey->childColumns[0])->selectRaw('count(*) as child_count')->groupBy($foreignKey->childColumns[0]),
+                'child_counts',
+                "child_counts.{$foreignKey->childColumns[0]}",
+                '=',
+                "{$table}.{$foreignKey->parentColumns[0]}",
+            )->select("{$table}.*", 'child_counts.child_count'),
+            ReadShape::MostChildren => (function () use ($query, $children, $table): void {
+                $query->orderByDesc($children()->selectRaw('count(*)'));
+                foreach ($this->release->schema->table($table)->primaryKey as $column) {
+                    $query->orderBy("{$table}.{$column}");
+                }
+                $query->limit(3);
+            })(),
+            ReadShape::RawParentsWithChildren => $query->whereRaw("exists (select 1 {$rawChildren})"),
+            ReadShape::RawChildCounts => $query->select("{$table}.*")->selectRaw("(select count(*) {$rawChildren}) as {$grammar->wrap('child_count')}"),
+            default => throw new \LogicException("No builder form of {$read->shape->value}"),
+        };
+    }
+
+    /**
+     * How many rows of the table, selected by the read's conditions, each value of the foreign
+     * key has, read from a subquery.
+     */
+    private function runGroupedChildCounts(Read $read, bool $cached): mixed
+    {
+        $column = $this->release->schema->foreignKey((string) $read->subject)->childColumns[0];
+        $grouped = $this->table($read->relation, true)->select($column)->selectRaw('count(*) as child_count')->groupBy($column);
+        $read->api === Api::Raw
+            ? $this->applyRawConditions($grouped, $read->conditions, $read->or, null)
+            : $this->applyConditions($grouped, $read->conditions, $read->or, null, false);
+        $query = DB::query()->fromSub($grouped, 'grouped');
+
+        return self::canonical(($cached ? $query : $query->withoutCache())->get()->all());
+    }
+
+    private function table(string $name, bool $cached): Builder
+    {
+        $query = DB::table($name);
+
+        return $cached ? $query : $query->withoutCache();
     }
 
     private function runWrite(Write $write): mixed
@@ -125,7 +221,10 @@ final readonly class Interpreter
         }
 
         $query = $write->api === Api::Model ? $this->modelQuery($write->table, true) : DB::table($write->table);
-        $this->applyConditions($query, $write->conditions, $write->or, $write->table, $write->api === Api::Model);
+
+        if ($write->kind !== WriteKind::UpdateOrInsert && $write->kind !== WriteKind::InsertUsing) {
+            $this->applyConditions($query, $write->conditions, $write->or, $write->table, $write->api === Api::Model);
+        }
 
         return match ($write->kind) {
             WriteKind::Insert => $write->api === Api::Model
@@ -136,11 +235,63 @@ final readonly class Interpreter
             WriteKind::Upsert => $query->upsert($write->rows, $table->primaryKey, array_values(array_intersect(['label', 'amount'], array_keys($write->values())))),
             WriteKind::Update => $query->update($write->values()),
             WriteKind::Increment => $query->increment('amount', (int) $write->values()['amount']),
+            WriteKind::IncrementEach => $query->incrementEach(['amount' => (int) $write->values()['amount']]),
             WriteKind::Delete => $query->delete(),
             WriteKind::Truncate => $query->truncate(),
             WriteKind::Save => self::model($query->first())?->fill($write->values())->save(),
             WriteKind::DeleteModel => self::model($query->first())?->delete(),
+            WriteKind::InsertUsing => $this->insertUsing($write, $table),
+            WriteKind::UpdateOrInsert => $query->updateOrInsert(self::attributes($write->conditions), $write->values()),
+            WriteKind::UpdateJoined => $this->joinParent($query, $write)->update(array_combine(
+                array_map(static fn (string $column): string => "{$write->table}.{$column}", array_keys($write->values())),
+                array_values($write->values()),
+            )),
+            WriteKind::DeleteWhereParentExists => $query->whereExists(function (Builder $exists) use ($write): void {
+                $foreignKey = $this->release->schema->foreignKey((string) $write->foreignKey);
+                $exists->select(DB::raw(1))->from("{$foreignKey->parent} as parents")->where('parents.label', $write->label);
+                foreach ($foreignKey->childColumns as $index => $column) {
+                    $exists->whereColumn("parents.{$foreignKey->parentColumns[$index]}", "{$write->table}.{$column}");
+                }
+            })->delete(),
+            WriteKind::Statements => throw new \LogicException('Statements are raw'),
         };
+    }
+
+    /**
+     * Copies the label of the selected rows, with their amount when the table has one, into the
+     * audit table.
+     */
+    private function insertUsing(Write $write, Table $table): int
+    {
+        $source = DB::table($write->table)->select('label', $table->hasColumn('amount') ? 'amount' : DB::raw('null'));
+        $this->applyConditions($source, $write->conditions, $write->or, null, false);
+
+        return DB::table(SchemaGenerator::AUDIT)->insertUsing(['note', 'ref'], $source);
+    }
+
+    private function joinParent(BuilderContract $query, Write $write): BuilderContract
+    {
+        $foreignKey = $this->release->schema->foreignKey((string) $write->foreignKey);
+
+        return $query->join("{$foreignKey->parent} as joined_parent", function ($join) use ($foreignKey, $write): void {
+            foreach ($foreignKey->childColumns as $index => $column) {
+                $join->on("{$write->table}.{$column}", '=', "joined_parent.{$foreignKey->parentColumns[$index]}");
+            }
+        })->where('joined_parent.label', $write->label);
+    }
+
+    /**
+     * @param  list<Condition>  $conditions
+     * @return array<string, int|string>
+     */
+    private static function attributes(array $conditions): array
+    {
+        $attributes = [];
+        foreach ($conditions as $condition) {
+            $attributes[$condition->column] = $condition->values[0];
+        }
+
+        return $attributes;
     }
 
     private function runRawWrite(Write $write): mixed
@@ -163,8 +314,28 @@ final readonly class Interpreter
                 [...array_values($write->values()), ...$bindings],
             ),
             WriteKind::Delete => DB::delete("delete from {$table}{$where}", $bindings),
+            WriteKind::Statements => DB::unprepared($this->statements($write)),
             default => throw new \LogicException("No raw form of {$write->kind->value}"),
         };
+    }
+
+    /**
+     * An update of the selected rows and one of the audit table, as one string of SQL with the
+     * values written into it, as `DB::unprepared()` takes it.
+     */
+    private function statements(Write $write): string
+    {
+        $connection = DB::connection();
+        $grammar = $connection->getQueryGrammar();
+        $update = DB::table($write->table);
+        $this->applyConditions($update, $write->conditions, $write->or, null, false);
+        $first = $grammar->substituteBindingsIntoRawSql(
+            $grammar->compileUpdate($update, $write->values()),
+            $connection->prepareBindings($grammar->prepareBindingsForUpdate($update->bindings, $write->values())),
+        );
+        $audit = $grammar->wrapTable(SchemaGenerator::AUDIT);
+
+        return "{$first}; update {$audit} set {$grammar->wrap('note')} = 'statements' where {$grammar->wrap('id')} = 1";
     }
 
     private function modelQuery(string $table, bool $cached): EloquentBuilder

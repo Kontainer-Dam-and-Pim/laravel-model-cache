@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache\Tests\Fuzz\Rolling;
 
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\App\RelationKind;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\App\Release;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Api;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Condition;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Operator;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Read;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\ReadShape;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Write;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\WriteKind;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Column;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\ForeignKey;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Identifier;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Schema;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\SchemaGenerator;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Table;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\ValueKind;
 
 /**
  * Generates the reads and writes a release's code makes, against the schema and models it was
@@ -25,6 +30,8 @@ final readonly class OperationGenerator
 {
     private const array LABELS = ['a', 'b', 'c'];
 
+    private const int SEEDED_KEYS = 4;
+
     public function __construct(private Dice $dice) {}
 
     /**
@@ -33,18 +40,61 @@ final readonly class OperationGenerator
     public function read(Release $release, ?string $table = null): Read
     {
         if ($table === null && $release->schema->views !== [] && $this->dice->chance(15)) {
-            return new Read(Api::Builder, $this->dice->pick(array_keys($release->schema->views)), [], count: $this->dice->chance(30));
+            return new Read(Api::Builder, $this->dice->pick(array_keys($release->schema->views)), [], shape: $this->dice->chance(30) ? ReadShape::Count : ReadShape::Rows);
         }
 
         $table = $table === null ? $this->table($release, 5) : $release->schema->table($table);
         $api = Api::from($this->dice->weighted([Api::Model->value => 4, Api::Builder->value => 4, Api::Raw->value => 2]));
         $conditions = $this->conditions($release, $table, $api, $this->dice->weighted([0 => 2, 1 => 5, 2 => 3]));
-        $model = $release->model($table->name);
-        $joins = array_keys(array_filter($release->schema->foreignKeys, static fn ($foreignKey): bool => $foreignKey->child === $table->name));
-        $join = $api !== Api::Model && $joins !== [] && $this->dice->chance(20) ? $this->dice->pick($joins) : null;
-        $with = $api === Api::Model && $model->relations !== [] && $this->dice->chance(25) ? $this->dice->pick($model->relations)->name : null;
+        [$shape, $subject] = $this->shape($release, $table, $api);
+        $label = in_array($shape, [ReadShape::WhereHas, ReadShape::ChildrenOfLabelledParents], true) ? $this->dice->pick(self::LABELS) : null;
 
-        return new Read($api, $table->name, $conditions, count($conditions) === 2 && $this->dice->chance(25), $join, $with, $with === null && $this->dice->chance(15));
+        return new Read($api, $table->name, $conditions, count($conditions) === 2 && $this->dice->chance(25), $shape, $subject, $label);
+    }
+
+    /**
+     * A shape the table supports through the API, with the foreign key, relation or other table
+     * it needs.
+     *
+     * @return array{ReadShape, string|null}
+     */
+    private function shape(Release $release, Table $table, Api $api): array
+    {
+        $singleColumn = array_filter($release->schema->foreignKeys, static fn (ForeignKey $foreignKey): bool => $foreignKey->isSingleColumn());
+        $subjects = [
+            ReadShape::Rows->value => [null],
+            ReadShape::Count->value => [null],
+            ...($table->hasColumn('amount') && $api !== Api::Model ? [ReadShape::Sum->value => [null], ReadShape::Max->value => [null]] : []),
+        ];
+        $asChild = array_keys(array_filter($singleColumn, static fn (ForeignKey $foreignKey): bool => $foreignKey->child === $table->name));
+        $asParent = array_keys(array_filter($singleColumn, static fn (ForeignKey $foreignKey): bool => $foreignKey->parent === $table->name));
+        $relations = array_map(static fn ($relation): string => $relation->name, $release->model($table->name)->relations);
+        $hasMany = array_map(static fn ($relation): string => $relation->name, array_filter($release->model($table->name)->relations, static fn ($relation): bool => $relation->kind === RelationKind::HasMany));
+        $others = array_values(array_diff(array_keys($release->schema->tables), [$table->name]));
+
+        $subjects += match ($api) {
+            Api::Model => [ReadShape::EagerLoad->value => $relations, ReadShape::WithCount->value => $hasMany, ReadShape::WhereHas->value => $relations],
+            Api::Raw => [ReadShape::RawParentsWithChildren->value => $asParent, ReadShape::RawChildCounts->value => $asParent],
+            Api::Builder => [
+                ReadShape::JoinParent->value => array_keys(array_filter($release->schema->foreignKeys, static fn (ForeignKey $foreignKey): bool => $foreignKey->child === $table->name)),
+                ReadShape::ChildrenOfLabelledParents->value => $asChild,
+                ReadShape::GroupedChildCounts->value => $asChild,
+                ReadShape::ParentsWithChildren->value => $asParent,
+                ReadShape::ChildCounts->value => $asParent,
+                ReadShape::JoinedChildCounts->value => $asParent,
+                ReadShape::MostChildren->value => $asParent,
+                ReadShape::Union->value => $others,
+            ],
+        };
+
+        $weights = [];
+        foreach (array_filter($subjects, static fn (array $candidates): bool => $candidates !== []) as $shape => $_) {
+            $weights[$shape] = $shape === ReadShape::Rows->value ? 12 : 2;
+        }
+
+        $shape = ReadShape::from($this->dice->weighted($weights));
+
+        return [$shape, $this->dice->pick($subjects[$shape->value])];
     }
 
     /**
@@ -64,64 +114,193 @@ final readonly class OperationGenerator
             WriteKind::Save->value => 10,
             WriteKind::DeleteModel->value => 6,
             ...($table->autoIncrement ? [WriteKind::InsertGetId->value => 5] : []),
-            ...($table->hasColumn('amount') ? [WriteKind::Increment->value => 5] : []),
+            ...($table->hasColumn('amount') ? [WriteKind::Increment->value => 5, WriteKind::IncrementEach->value => 2] : []),
+            WriteKind::InsertUsing->value => 3,
+            WriteKind::UpdateOrInsert->value => 3,
+            WriteKind::Statements->value => 2,
+            ...($this->parentKeys($release, $table) === [] ? [] : [WriteKind::UpdateJoined->value => 3, WriteKind::DeleteWhereParentExists->value => 2]),
         ];
         $kind = WriteKind::from($this->dice->weighted($kinds));
         $api = $this->dice->pick(match ($kind) {
             WriteKind::Insert, WriteKind::Update, WriteKind::Delete => [Api::Builder, Api::Raw, Api::Model],
-            WriteKind::Upsert, WriteKind::Increment => [Api::Builder, Api::Model],
+            WriteKind::Upsert, WriteKind::Increment, WriteKind::IncrementEach => [Api::Builder, Api::Model],
             WriteKind::Save, WriteKind::DeleteModel => [Api::Model],
-            WriteKind::InsertGetId, WriteKind::InsertOrIgnore, WriteKind::Truncate => [Api::Builder],
+            WriteKind::Statements => [Api::Raw],
+            WriteKind::InsertGetId, WriteKind::InsertOrIgnore, WriteKind::Truncate, WriteKind::InsertUsing,
+            WriteKind::UpdateOrInsert, WriteKind::UpdateJoined, WriteKind::DeleteWhereParentExists => [Api::Builder],
         });
 
         return match ($kind) {
-            WriteKind::Insert, WriteKind::InsertOrIgnore => new Write($api, $kind, $table->name, [], $this->rows($table, false)),
-            WriteKind::InsertGetId => new Write($api, $kind, $table->name, [], [$this->row($table, false)]),
-            WriteKind::Upsert => new Write($api, $kind, $table->name, [], $this->rows($table, true)),
+            WriteKind::Insert, WriteKind::InsertOrIgnore => new Write($api, $kind, $table->name, [], $this->rows($release, $table, false)),
+            WriteKind::InsertGetId => new Write($api, $kind, $table->name, [], [$this->row($release, $table, false)]),
+            WriteKind::Upsert => new Write($api, $kind, $table->name, [], $this->rows($release, $table, true)),
             WriteKind::Truncate => new Write($api, $kind, $table->name, [], []),
-            WriteKind::Increment => new Write($api, $kind, $table->name, $this->conditions($release, $table, $api, $this->dice->int(0, 2)), [['amount' => $this->dice->int(1, 2)]]),
-            WriteKind::Delete, WriteKind::DeleteModel => $this->conditionalWrite($release, $table, $api, $kind, []),
-            WriteKind::Update, WriteKind::Save => $this->conditionalWrite($release, $table, $api, $kind, $this->assignments($table)),
+            WriteKind::Increment, WriteKind::IncrementEach => new Write($api, $kind, $table->name, $this->conditions($release, $table, $api, $this->dice->int(0, 2)), [['amount' => $this->dice->int(1, 2)]]),
+            WriteKind::Delete, WriteKind::DeleteModel, WriteKind::InsertUsing => $this->conditionalWrite($release, $table, $api, $kind, []),
+            WriteKind::Update, WriteKind::Save, WriteKind::Statements => $this->conditionalWrite($release, $table, $api, $kind, $this->assignments($table)),
+            WriteKind::UpdateOrInsert => new Write($api, $kind, $table->name, $this->keyConditions($table), [$this->assignments($table)]),
+            WriteKind::UpdateJoined => $this->conditionalWrite($release, $table, $api, $kind, $this->assignments($table))->joinedTo($this->dice->pick($this->parentKeys($release, $table)), $this->dice->pick(self::LABELS)),
+            WriteKind::DeleteWhereParentExists => $this->conditionalWrite($release, $table, $api, $kind, [])->joinedTo($this->dice->pick($this->parentKeys($release, $table)), $this->dice->pick(self::LABELS)),
         };
     }
 
     /**
-     * Inserts filling the table with rows that later reads and writes meet.
+     * The foreign keys of the table to its parents.
+     *
+     * @return list<string>
+     */
+    private function parentKeys(Release $release, Table $table): array
+    {
+        return array_map(static fn (ForeignKey $foreignKey): string => $foreignKey->name, $release->schema->foreignKeysOf($table->name));
+    }
+
+    /**
+     * Conditions pinning every column of the primary key to a value, as `updateOrInsert()` takes them.
+     *
+     * @return list<Condition>
+     */
+    private function keyConditions(Table $table): array
+    {
+        return array_map(
+            fn (string $column): Condition => new Condition($column, Operator::Equals, [$this->value($table->column($column), true) ?? $table->column($column)->kind->domain()[0]]),
+            $table->primaryKey,
+        );
+    }
+
+    /**
+     * Inserts filling each table with rows of the first keys of its domain, which later reads and
+     * writes meet, leaving the others for later inserts. Generated keys are left to the database,
+     * which assigns them in that order to the fresh tables.
      *
      * @return list<Write>
      */
     public function seed(Release $release): array
     {
         $writes = [];
-        foreach ($release->schema->tables as $table) {
-            if ($table->name === SchemaGenerator::AUDIT) {
-                continue;
+        $seeded = [];
+        foreach ($this->seedOrder($release->schema) as $table) {
+            $keys = array_slice($table->column($table->primaryKey[0])->kind->domain(), 0, self::SEEDED_KEYS);
+
+            foreach ($keys as $index => $key) {
+                $writes[] = new Write(Api::Builder, WriteKind::InsertOrIgnore, $table->name, [], [$this->seedRow($release, $table, $key, $seeded, array_slice($keys, 0, $index))]);
             }
 
-            foreach ($table->column($table->primaryKey[0])->kind->domain() as $key) {
-                $writes[] = new Write(Api::Builder, WriteKind::InsertOrIgnore, $table->name, [], [$this->seedRow($table, $key)]);
-            }
+            $seeded[$table->name] = true;
         }
 
         return $writes;
     }
 
     /**
-     * A row with the key value, nullable foreign keys left empty so it inserts whatever rows its
-     * parents have, and the identifier its key implies.
+     * The data tables, each after the tables it references where foreign key cycles allow it,
+     * and always after those its rows must reference.
      *
+     * @return list<Table>
+     */
+    private function seedOrder(Schema $schema): array
+    {
+        $remaining = array_filter($schema->tables, static fn (Table $table): bool => $table->name !== SchemaGenerator::AUDIT);
+        $order = [];
+
+        while ($remaining !== []) {
+            $ready = static fn (bool $onlyRequired): array => array_filter(
+                $remaining,
+                static fn (Table $table): bool => array_filter(
+                    $schema->foreignKeysOf($table->name),
+                    static fn (ForeignKey $foreignKey): bool => $foreignKey->parent !== $table->name && isset($remaining[$foreignKey->parent])
+                        && (! $onlyRequired || SchemaGenerator::requires($schema, $table->name, $foreignKey->parent)),
+                ) === [],
+            );
+            $next = $ready(false) ?: $ready(true) ?: throw new \LogicException('Every row of these tables must reference another of them: '.implode(', ', array_keys($remaining)));
+            $table = reset($next);
+            $order[] = $table;
+            unset($remaining[$table->name]);
+        }
+
+        return $order;
+    }
+
+    /**
+     * A row with the key value, the identifier it implies, and foreign keys referencing rows
+     * seeded before it: always when the key must reference a row, mostly when it may.
+     *
+     * @param  array<string, true>  $seeded  the tables seeded before
+     * @param  list<int|string>  $earlierKeys  the keys of the table's rows seeded before
      * @return array<string, int|string|null>
      */
-    private function seedRow(Table $table, int|string $key): array
+    private function seedRow(Release $release, Table $table, int|string $key, array $seeded, array $earlierKeys): array
     {
         $row = [];
         foreach ($table->columns as $column) {
+            $seededValue = self::seededValue($table, $column->name, $key);
             $row[$column->name] = match (true) {
-                $column->name === $table->primaryKey[0] => $key,
-                $column->name === 'ref' && in_array('ref', $table->unique, true) => Identifier::of($key, $table->column($table->primaryKey[0])->kind),
+                $seededValue !== null => $seededValue,
                 $column->nullable => null,
-                default => $this->value($column, in_array($column->name, $table->primaryKey, true)),
+                default => $this->value($column, false),
             };
+        }
+
+        if ($table->autoIncrement) {
+            unset($row[$table->primaryKey[0]]);
+        }
+
+        foreach ($release->schema->foreignKeysOf($table->name) as $foreignKey) {
+            $parent = $release->schema->table($foreignKey->parent);
+            $parentKeys = $parent->name === $table->name ? $earlierKeys : (isset($seeded[$parent->name]) ? array_slice($parent->column($parent->primaryKey[0])->kind->domain(), 0, self::SEEDED_KEYS) : []);
+            $required = ! $table->column($foreignKey->childColumns[0])->nullable;
+
+            if ($parentKeys === [] || (! $required && ! $this->dice->chance(70))) {
+                continue;
+            }
+
+            $parentKey = $this->dice->pick($parentKeys);
+            foreach ($foreignKey->childColumns as $index => $column) {
+                $row[$column] = self::seededValue($parent, $foreignKey->parentColumns[$index], $parentKey);
+            }
+        }
+
+        return $row;
+    }
+
+    /**
+     * The value the row seeded with the key has in a key column: the key itself, the identifier
+     * it implies, or for the second column of a composite key the key spelled for that column;
+     * null for other columns.
+     */
+    private static function seededValue(Table $table, string $column, int|string $key): int|string|null
+    {
+        $keyKind = $table->column($table->primaryKey[0])->kind;
+
+        return match (true) {
+            $column === $table->primaryKey[0] => $key,
+            $column === 'ref' && in_array('ref', $table->unique, true) => Identifier::of($key, $keyKind),
+            in_array($column, $table->primaryKey, true) => $table->column($column)->kind === ValueKind::Text ? Identifier::of($key, $keyKind) : $key,
+            default => null,
+        };
+    }
+
+    /**
+     * Mostly gives the row's foreign keys the values of a parent the seeding inserted, as rows
+     * referencing existing records do, and sometimes leaves them to chance.
+     *
+     * @param  array<string, int|string|null>  $row
+     * @return array<string, int|string|null>
+     */
+    private function withExistingParents(Release $release, Table $table, array $row): array
+    {
+        foreach ($release->schema->foreignKeysOf($table->name) as $foreignKey) {
+            if (! $this->dice->chance(70)) {
+                continue;
+            }
+
+            $parent = $release->schema->table($foreignKey->parent);
+            $key = $this->dice->pick($parent->column($parent->primaryKey[0])->kind->domain());
+
+            foreach ($foreignKey->childColumns as $index => $column) {
+                if (array_key_exists($column, $row)) {
+                    $row[$column] = self::seededValue($parent, $foreignKey->parentColumns[$index], $key) ?? $row[$column];
+                }
+            }
         }
 
         return $row;
@@ -218,9 +397,9 @@ final readonly class OperationGenerator
      *
      * @return non-empty-list<array<string, int|string|null>>
      */
-    private function rows(Table $table, bool $withKey): array
+    private function rows(Release $release, Table $table, bool $withKey): array
     {
-        $first = $this->row($table, $withKey);
+        $first = $this->row($release, $table, $withKey);
         $rows = [$first];
 
         if ($this->dice->chance(40)) {
@@ -237,13 +416,13 @@ final readonly class OperationGenerator
     /**
      * @return array<string, int|string|null>
      */
-    private function row(Table $table, bool $withKey): array
+    private function row(Release $release, Table $table, bool $withKey): array
     {
         $row = [];
         foreach ($table->columns as $column) {
             $isKey = in_array($column->name, $table->primaryKey, true);
 
-            if ($isKey && $table->autoIncrement && ! $withKey && $this->dice->chance(50)) {
+            if ($isKey && $table->autoIncrement && ! $withKey && $this->dice->chance(90)) {
                 continue;
             }
 
@@ -254,7 +433,7 @@ final readonly class OperationGenerator
             $row[$column->name] = $this->value($column, $isKey);
         }
 
-        return $this->withIdentifierOfKey($table, $row);
+        return $this->withExistingParents($release, $table, $this->withIdentifierOfKey($table, $row));
     }
 
     /**
