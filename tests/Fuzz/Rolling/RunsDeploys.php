@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache\Tests\Fuzz\Rolling;
 
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Pod\Server;
+
 /**
  * Runs plans of deploys from a test case: the pods share the test's database, which on SQLite is
  * a file they can all open, and its Redis.
@@ -23,7 +25,7 @@ trait RunsDeploys
         $this->sqliteFile = (string) tempnam(sys_get_temp_dir(), 'model-cache-deploy-');
         $app['config']->set('database.connections.testing.database', $this->sqliteFile);
         $app['config']->set('database.connections.testing.journal_mode', 'wal');
-        $app['config']->set('database.connections.testing.busy_timeout', 5000);
+        $app['config']->set('database.connections.testing.busy_timeout', Server::LOCK_WAIT_SECONDS * 1000);
     }
 
     protected function tearDown(): void

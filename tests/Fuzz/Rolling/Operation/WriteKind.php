@@ -21,6 +21,18 @@ enum WriteKind: string
     /** A model found by the conditions and deleted. */
     case DeleteModel = 'deleteModel';
 
+    /** Updates the label of rows through an updatable view of their table; `table` names the view. */
+    case UpdateView = 'updateView';
+
+    /** Deletes rows through an updatable view of their table; `table` names the view. */
+    case DeleteView = 'deleteView';
+
+    /** Restores the soft deleted rows the conditions select. */
+    case Restore = 'restore';
+
+    /** Deletes the rows the conditions select, soft deleted ones included, for good. */
+    case ForceDelete = 'forceDelete';
+
     /** Copies the label of the selected rows into the audit table, by `insertUsing()`. */
     case InsertUsing = 'insertUsing';
 
@@ -37,4 +49,13 @@ enum WriteKind: string
 
     /** Two updates in one `DB::unprepared()` call. */
     case Statements = 'statements';
+
+    /** `REPLACE INTO`, deleting the rows whose key exists before inserting. */
+    case Replace = 'replace';
+
+    /** A delete of the rows a common table expression selects. */
+    case CteDelete = 'cteDelete';
+
+    /** `MERGE`, updating the row with the key or inserting it. */
+    case Merge = 'merge';
 }

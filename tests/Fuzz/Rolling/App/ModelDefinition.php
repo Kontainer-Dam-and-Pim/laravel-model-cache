@@ -21,6 +21,7 @@ final readonly class ModelDefinition
         public ValueKind $keyKind,
         public bool $incrementing,
         public array $relations,
+        public bool $softDeletes = false,
     ) {}
 
     public function className(int $release): string
@@ -55,6 +56,7 @@ final readonly class ModelDefinition
             'keyKind' => $this->keyKind->value,
             'incrementing' => $this->incrementing,
             'relations' => array_map(static fn (Relation $relation): array => $relation->toArray(), $this->relations),
+            'softDeletes' => $this->softDeletes,
         ];
     }
 
@@ -63,6 +65,6 @@ final readonly class ModelDefinition
      */
     public static function fromArray(array $data): self
     {
-        return new self($data['table'], $data['keyName'], ValueKind::from($data['keyKind']), $data['incrementing'], array_map(Relation::fromArray(...), $data['relations']));
+        return new self($data['table'], $data['keyName'], ValueKind::from($data['keyKind']), $data['incrementing'], array_map(Relation::fromArray(...), $data['relations']), $data['softDeletes']);
     }
 }

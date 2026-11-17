@@ -8,18 +8,24 @@ use Kontainer\ModelCache\Tests\Fuzz\Rolling\App\RelationKind;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\App\Release;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Api;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Condition;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\KeywordCase;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Operator;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Quoting;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\RawStyle;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Read;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\ReadShape;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Write;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\WriteKind;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Column;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Driver;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\ForeignKey;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Identifier;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Schema;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\SchemaGenerator;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Table;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\ValueKind;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\View;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\ViewKind;
 
 /**
  * Generates the reads and writes a release's code makes, against the schema and models it was
@@ -32,7 +38,10 @@ final readonly class OperationGenerator
 
     private const int SEEDED_KEYS = 4;
 
-    public function __construct(private Dice $dice) {}
+    public function __construct(
+        private Dice $dice,
+        private Driver $driver,
+    ) {}
 
     /**
      * @param  string|null  $table  the table to read, a random table or view when null
@@ -73,7 +82,12 @@ final readonly class OperationGenerator
         $others = array_values(array_diff(array_keys($release->schema->tables), [$table->name]));
 
         $subjects += match ($api) {
-            Api::Model => [ReadShape::EagerLoad->value => $relations, ReadShape::WithCount->value => $hasMany, ReadShape::WhereHas->value => $relations],
+            Api::Model => [
+                ReadShape::EagerLoad->value => $relations,
+                ReadShape::WithCount->value => $hasMany,
+                ReadShape::WhereHas->value => $relations,
+                ...($release->model($table->name)->softDeletes ? [ReadShape::WithTrashed->value => [null], ReadShape::OnlyTrashed->value => [null]] : []),
+            ],
             Api::Raw => [ReadShape::RawParentsWithChildren->value => $asParent, ReadShape::RawChildCounts->value => $asParent],
             Api::Builder => [
                 ReadShape::JoinParent->value => array_keys(array_filter($release->schema->foreignKeys, static fn (ForeignKey $foreignKey): bool => $foreignKey->child === $table->name)),
@@ -104,6 +118,11 @@ final readonly class OperationGenerator
     public function write(Release $release, bool $inTransaction, ?string $table = null): Write
     {
         $table = $table === null ? $this->table($release, 3) : $release->schema->table($table);
+        $views = $this->writableViews($release, $table);
+
+        if ($views !== [] && $this->dice->chance(15)) {
+            return $this->writeThroughView($release, $this->dice->pick($views));
+        }
         $kinds = [
             WriteKind::Insert->value => 15,
             WriteKind::InsertOrIgnore->value => 5,
@@ -119,29 +138,86 @@ final readonly class OperationGenerator
             WriteKind::UpdateOrInsert->value => 3,
             WriteKind::Statements->value => 2,
             ...($this->parentKeys($release, $table) === [] ? [] : [WriteKind::UpdateJoined->value => 3, WriteKind::DeleteWhereParentExists->value => 2]),
+            ...($this->driver->isMySqlFamily() || $this->driver === Driver::Sqlite ? [WriteKind::Replace->value => 2] : []),
+            ...(count($table->primaryKey) === 1 && $this->driver !== Driver::MariaDb ? [WriteKind::CteDelete->value => 2] : []),
+            ...(count($table->primaryKey) === 1 && $this->driver === Driver::PgSql ? [WriteKind::Merge->value => 2] : []),
+            ...($release->model($table->name)->softDeletes ? [WriteKind::Restore->value => 10, WriteKind::ForceDelete->value => 5] : []),
         ];
         $kind = WriteKind::from($this->dice->weighted($kinds));
         $api = $this->dice->pick(match ($kind) {
-            WriteKind::Insert, WriteKind::Update, WriteKind::Delete => [Api::Builder, Api::Raw, Api::Model],
-            WriteKind::Upsert, WriteKind::Increment, WriteKind::IncrementEach => [Api::Builder, Api::Model],
-            WriteKind::Save, WriteKind::DeleteModel => [Api::Model],
-            WriteKind::Statements => [Api::Raw],
-            WriteKind::InsertGetId, WriteKind::InsertOrIgnore, WriteKind::Truncate, WriteKind::InsertUsing,
-            WriteKind::UpdateOrInsert, WriteKind::UpdateJoined, WriteKind::DeleteWhereParentExists => [Api::Builder],
+            WriteKind::Insert, WriteKind::Update, WriteKind::Delete, WriteKind::Upsert => [Api::Builder, Api::Raw, Api::Model],
+            WriteKind::Increment, WriteKind::IncrementEach => [Api::Builder, Api::Model],
+            WriteKind::Save, WriteKind::DeleteModel, WriteKind::Restore, WriteKind::ForceDelete => [Api::Model],
+            WriteKind::Statements, WriteKind::Replace, WriteKind::CteDelete, WriteKind::Merge => [Api::Raw],
+            WriteKind::UpdateJoined, WriteKind::DeleteWhereParentExists => [Api::Builder, Api::Raw],
+            WriteKind::InsertGetId, WriteKind::InsertOrIgnore, WriteKind::Truncate, WriteKind::InsertUsing, WriteKind::UpdateOrInsert => [Api::Builder],
         });
+        $write = $this->unstyledWrite($release, $table, $kind, $api);
 
+        return $api === Api::Raw && $kind !== WriteKind::Statements ? $write->styled($this->style($kind)) : $write;
+    }
+
+    private function unstyledWrite(Release $release, Table $table, WriteKind $kind, Api $api): Write
+    {
         return match ($kind) {
             WriteKind::Insert, WriteKind::InsertOrIgnore => new Write($api, $kind, $table->name, [], $this->rows($release, $table, false)),
             WriteKind::InsertGetId => new Write($api, $kind, $table->name, [], [$this->row($release, $table, false)]),
-            WriteKind::Upsert => new Write($api, $kind, $table->name, [], $this->rows($release, $table, true)),
+            WriteKind::Upsert, WriteKind::Replace => new Write($api, $kind, $table->name, [], $this->rows($release, $table, true)),
+            WriteKind::Merge => new Write($api, $kind, $table->name, [], [$this->row($release, $table, true)]),
             WriteKind::Truncate => new Write($api, $kind, $table->name, [], []),
             WriteKind::Increment, WriteKind::IncrementEach => new Write($api, $kind, $table->name, $this->conditions($release, $table, $api, $this->dice->int(0, 2)), [['amount' => $this->dice->int(1, 2)]]),
-            WriteKind::Delete, WriteKind::DeleteModel, WriteKind::InsertUsing => $this->conditionalWrite($release, $table, $api, $kind, []),
+            WriteKind::Delete, WriteKind::DeleteModel, WriteKind::InsertUsing, WriteKind::CteDelete, WriteKind::Restore, WriteKind::ForceDelete => $this->conditionalWrite($release, $table, $api, $kind, []),
             WriteKind::Update, WriteKind::Save, WriteKind::Statements => $this->conditionalWrite($release, $table, $api, $kind, $this->assignments($table)),
             WriteKind::UpdateOrInsert => new Write($api, $kind, $table->name, $this->keyConditions($table), [$this->assignments($table)]),
             WriteKind::UpdateJoined => $this->conditionalWrite($release, $table, $api, $kind, $this->assignments($table))->joinedTo($this->dice->pick($this->parentKeys($release, $table)), $this->dice->pick(self::LABELS)),
             WriteKind::DeleteWhereParentExists => $this->conditionalWrite($release, $table, $api, $kind, [])->joinedTo($this->dice->pick($this->parentKeys($release, $table)), $this->dice->pick(self::LABELS)),
         };
+    }
+
+    /**
+     * The projections of the table, which every database but SQLite lets writes through.
+     *
+     * @return list<View>
+     */
+    private function writableViews(Release $release, Table $table): array
+    {
+        return $this->driver === Driver::Sqlite ? [] : array_values(array_filter(
+            $release->schema->views,
+            static fn (View $view): bool => $view->kind === ViewKind::Projection && $view->source === $table->name,
+        ));
+    }
+
+    /**
+     * An update of labels or a delete through the view, of rows it pins by the table's key.
+     */
+    private function writeThroughView(Release $release, View $view): Write
+    {
+        $table = $release->schema->table($view->source);
+        $conditions = $this->dice->chance(80) ? [$this->condition($table->column($table->primaryKey[0]))] : [];
+
+        return $this->dice->chance(70)
+            ? new Write(Api::Builder, WriteKind::UpdateView, $view->name, $conditions, [['label' => $this->dice->pick(self::LABELS)]])
+            : new Write(Api::Builder, WriteKind::DeleteView, $view->name, $conditions, []);
+    }
+
+    /**
+     * A spelling of a hand-written statement the database accepts: quoting, keyword case,
+     * comments and whitespace, and `RETURNING` where the database has it for the statement.
+     */
+    private function style(WriteKind $kind): RawStyle
+    {
+        $comments = ['', '', "-- note\n", '/* job */ ', ...($this->driver->isMySqlFamily() ? ["# note\n"] : [])];
+        $returns = in_array($kind, [WriteKind::Insert, WriteKind::Update, WriteKind::Delete], true)
+            && ($this->driver === Driver::PgSql || $this->driver === Driver::Sqlite);
+
+        return new RawStyle(
+            $this->dice->pick(Quoting::supportedBy($this->driver)),
+            $this->dice->pick(KeywordCase::cases()),
+            $this->dice->pick($comments),
+            $this->dice->pick(['', '', ';', ' -- done', "\n"]),
+            $this->dice->chance(30),
+            $returns && $this->dice->chance(30),
+        );
     }
 
     /**
@@ -537,7 +613,7 @@ final readonly class OperationGenerator
             return $this->dice->pick(self::LABELS);
         }
 
-        if ($column->nullable && ! $isKey && $this->dice->chance(20)) {
+        if ($column->nullable && ! $isKey && $this->dice->chance($column->kind === ValueKind::Timestamp ? 70 : 20)) {
             return null;
         }
 

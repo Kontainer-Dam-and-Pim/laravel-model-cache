@@ -54,7 +54,7 @@ final class PlanGenerator
         private readonly int $stepsPerPhase,
     ) {
         $this->dice = new Dice($seed);
-        $this->operations = new OperationGenerator($this->dice);
+        $this->operations = new OperationGenerator($this->dice, $driver);
         $this->state = new DeployState;
     }
 

@@ -336,6 +336,7 @@ Reads are assumed to have no side effects. Use `withoutCache()` for queries that
 - **Set a Redis eviction policy** such as `allkeys-lru` or `volatile-lru`. Evicted entries and tokens only cause misses. Under `noeviction`, a full Redis rejects invalidations. `volatile-ttl` evicts the short-lived replica markers first.
 - **Session settings are not part of the cache key.** If code changes settings that alter results, such as the session time zone for `TIMESTAMP` columns, use a separate connection or `withoutCache()`.
 - **Changing the prefix or the Redis database starts the cache cold.**
+- **Hosts serving at the same time must agree on `prefix`, `redis_connection` and `dependent_tables`.** A host invalidates under its own prefix and Redis database, and follows the dependencies its own `dependent_tables` declares, so a host that differs leaves the others' entries stale. During a rolling deploy that changes one of them, run `model-cache:flush` once every host runs the new value. `consider_rows`, `scope`, `include_tables`, `exclude_tables` and the expiration settings may differ between hosts.
 
 ## Console commands
 

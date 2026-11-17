@@ -29,7 +29,8 @@
                         "id"
                     ],
                     "autoIncrement": true,
-                    "unique": []
+                    "unique": [],
+                    "inherits": null
                 },
                 {
                     "name": "orders",
@@ -59,7 +60,8 @@
                     "autoIncrement": true,
                     "unique": [
                         "ref"
-                    ]
+                    ],
+                    "inherits": null
                 }
             ],
             "foreignKeys": [],
@@ -98,7 +100,8 @@
                             "id"
                         ],
                         "autoIncrement": true,
-                        "unique": []
+                        "unique": [],
+                        "inherits": null
                     },
                     {
                         "name": "orders",
@@ -128,7 +131,8 @@
                         "autoIncrement": true,
                         "unique": [
                             "ref"
-                        ]
+                        ],
+                        "inherits": null
                     }
                 ],
                 "foreignKeys": [],
@@ -141,14 +145,16 @@
                     "keyName": "id",
                     "keyKind": "int",
                     "incrementing": true,
-                    "relations": []
+                    "relations": [],
+                    "softDeletes": false
                 },
                 {
                     "table": "orders",
                     "keyName": "id",
                     "keyKind": "int",
                     "incrementing": true,
-                    "relations": []
+                    "relations": [],
+                    "softDeletes": false
                 }
             ],
             "config": {
@@ -187,7 +193,8 @@
                             "id"
                         ],
                         "autoIncrement": true,
-                        "unique": []
+                        "unique": [],
+                        "inherits": null
                     },
                     {
                         "name": "orders",
@@ -217,7 +224,8 @@
                         "autoIncrement": true,
                         "unique": [
                             "ref"
-                        ]
+                        ],
+                        "inherits": null
                     }
                 ],
                 "foreignKeys": [],
@@ -230,14 +238,16 @@
                     "keyName": "id",
                     "keyKind": "int",
                     "incrementing": true,
-                    "relations": []
+                    "relations": [],
+                    "softDeletes": false
                 },
                 {
                     "table": "orders",
                     "keyName": "ref",
                     "keyKind": "text",
                     "incrementing": false,
-                    "relations": []
+                    "relations": [],
+                    "softDeletes": false
                 }
             ],
             "config": {
@@ -280,7 +290,8 @@
                 ],
                 "or": false,
                 "foreignKey": null,
-                "label": null
+                "label": null,
+                "style": null
             },
             "transaction": null
         },
@@ -354,7 +365,8 @@
                 ],
                 "or": false,
                 "foreignKey": null,
-                "label": null
+                "label": null,
+                "style": null
             },
             "transaction": null
         },
@@ -405,7 +417,8 @@
                 ],
                 "or": false,
                 "foreignKey": null,
-                "label": null
+                "label": null,
+                "style": null
             },
             "transaction": null
         },

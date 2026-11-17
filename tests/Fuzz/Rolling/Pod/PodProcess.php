@@ -13,6 +13,12 @@ use RuntimeException;
  */
 final class PodProcess
 {
+    /**
+     * How long a pod may take for one statement, waiting for locks included, before it is taken
+     * to hang.
+     */
+    private const int SECONDS_PER_STATEMENT = Server::LOCK_WAIT_SECONDS + 1;
+
     private const int REPLY_TIMEOUT_SECONDS = 60;
 
     /**
@@ -54,7 +60,7 @@ final class PodProcess
     {
         $this->dispatch($message);
 
-        return $this->receive();
+        return $this->receive(1);
     }
 
     /**
@@ -70,14 +76,18 @@ final class PodProcess
     }
 
     /**
+     * Waits for the reply to a message of that many statements, each of which may wait for row
+     * locks as long as the pod lets it.
+     *
      * @return array<string, mixed>
      */
-    public function receive(): array
+    public function receive(int $statements): array
     {
+        $timeout = self::REPLY_TIMEOUT_SECONDS + $statements * self::SECONDS_PER_STATEMENT;
         $read = [$this->pipes[1]];
         $none = [];
-        if (stream_select($read, $none, $none, self::REPLY_TIMEOUT_SECONDS) !== 1 || ($line = fgets($this->pipes[1])) === false) {
-            throw new RuntimeException("Pod {$this->name} gave no reply\n".$this->errors());
+        if (stream_select($read, $none, $none, $timeout) !== 1 || ($line = fgets($this->pipes[1])) === false) {
+            throw new RuntimeException("Pod {$this->name} gave no reply within {$timeout} seconds\n".$this->errors());
         }
 
         try {

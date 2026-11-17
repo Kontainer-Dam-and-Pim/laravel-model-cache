@@ -28,6 +28,12 @@ enum ReadShape: string
     /** The rows a relation has rows with the label for, by `whereHas()`. */
     case WhereHas = 'whereHas';
 
+    /** The rows of a soft deleting model, deleted ones included. */
+    case WithTrashed = 'withTrashed';
+
+    /** The rows of a soft deleting model that are deleted. */
+    case OnlyTrashed = 'onlyTrashed';
+
     /** Child rows whose parent has the label, by `whereIn()` with a subquery. */
     case ChildrenOfLabelledParents = 'childrenOfLabelledParents';
 

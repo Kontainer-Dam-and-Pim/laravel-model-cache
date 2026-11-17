@@ -19,7 +19,7 @@ use UnexpectedValueException;
  */
 final class Server
 {
-    public const int LOCK_WAIT_SECONDS = 5;
+    public const int LOCK_WAIT_SECONDS = 2;
 
     /**
      * @param  resource  $input

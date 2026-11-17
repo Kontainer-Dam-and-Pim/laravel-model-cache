@@ -74,7 +74,7 @@ final readonly class ReleaseGenerator
     {
         $columns = [];
         foreach ($schema->tables as $table) {
-            if ($table->name === SchemaGenerator::AUDIT) {
+            if ($table->name === SchemaGenerator::AUDIT || $table->inherits !== null) {
                 continue;
             }
 
@@ -107,7 +107,7 @@ final readonly class ReleaseGenerator
      */
     private function droppableColumns(Schema $schema, Table $table): array
     {
-        $keyed = [...$table->primaryKey, ...$table->unique, 'label'];
+        $keyed = [...$table->primaryKey, ...$table->unique, 'label', SchemaGenerator::DELETED_AT];
 
         foreach ($schema->foreignKeys as $foreignKey) {
             if ($foreignKey->child === $table->name) {
@@ -146,6 +146,7 @@ final readonly class ReleaseGenerator
                 $table->column($keyName)->kind,
                 $table->autoIncrement && $table->primaryKey === [$keyName],
                 $relations[$table->name] ?? [],
+                $table->hasColumn(SchemaGenerator::DELETED_AT) && (($previous?->models[$table->name]->softDeletes ?? false) || $this->dice->chance(70)),
             );
         }
 

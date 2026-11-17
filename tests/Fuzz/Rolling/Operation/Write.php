@@ -15,6 +15,7 @@ final readonly class Write
      * @param  list<array<string, int|string|null>>  $rows  the rows of an insert or upsert, or the one row of values an update assigns
      * @param  string|null  $foreignKey  the foreign key to the parents a write joined to them filters by
      * @param  string|null  $label  the label of those parents
+     * @param  RawStyle|null  $style  how a raw write is spelled
      */
     public function __construct(
         public Api $api,
@@ -25,6 +26,7 @@ final readonly class Write
         public bool $or = false,
         public ?string $foreignKey = null,
         public ?string $label = null,
+        public ?RawStyle $style = null,
     ) {}
 
     /**
@@ -32,7 +34,15 @@ final readonly class Write
      */
     public function joinedTo(string $foreignKey, string $label): self
     {
-        return new self($this->api, $this->kind, $this->table, $this->conditions, $this->rows, $this->or, $foreignKey, $label);
+        return new self($this->api, $this->kind, $this->table, $this->conditions, $this->rows, $this->or, $foreignKey, $label, $this->style);
+    }
+
+    /**
+     * The write, spelled in the style.
+     */
+    public function styled(RawStyle $style): self
+    {
+        return new self($this->api, $this->kind, $this->table, $this->conditions, $this->rows, $this->or, $this->foreignKey, $this->label, $style);
     }
 
     /**
@@ -49,7 +59,9 @@ final readonly class Write
 
         $parent = $this->foreignKey === null ? '' : " whose parent of {$this->foreignKey} is labelled {$this->label}";
 
-        return "{$this->api->value} {$this->kind->value} {$this->table} ".json_encode($this->rows).$where.$parent;
+        $style = $this->style === null ? '' : " ({$this->style->describe()})";
+
+        return "{$this->api->value} {$this->kind->value} {$this->table} ".json_encode($this->rows).$where.$parent.$style;
     }
 
     /**
@@ -66,6 +78,7 @@ final readonly class Write
             'or' => $this->or,
             'foreignKey' => $this->foreignKey,
             'label' => $this->label,
+            'style' => $this->style?->toArray(),
         ];
     }
 
@@ -83,6 +96,7 @@ final readonly class Write
             $data['or'],
             $data['foreignKey'],
             $data['label'],
+            $data['style'] === null ? null : RawStyle::fromArray($data['style']),
         );
     }
 }

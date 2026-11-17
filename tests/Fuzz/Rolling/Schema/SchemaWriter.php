@@ -11,7 +11,8 @@ use Illuminate\Database\Schema\Builder;
 
 /**
  * Runs the migrations between schemas through Laravel's schema builder, as an application's
- * migrations would, with views and triggers written in each database's own SQL. A migration drops
+ * migrations would, with views, triggers and inheriting tables written in each database's own
+ * SQL. An inheriting table changes with the table it inherits from, never by itself. A migration drops
  * every view and trigger first and creates those of the new schema last, so tables can be rebuilt
  * in between.
  */
@@ -47,6 +48,7 @@ final readonly class SchemaWriter
         }
 
         $dropped = array_diff_key($from->tables, $to->tables);
+        uasort($dropped, static fn (Table $a, Table $b): int => ($a->inherits === null) <=> ($b->inherits === null));
         if ($dropped !== []) {
             $this->builder->withoutForeignKeyConstraints(function () use ($dropped): void {
                 foreach ($dropped as $table) {
@@ -55,7 +57,8 @@ final readonly class SchemaWriter
             });
         }
 
-        foreach (array_diff_key($to->tables, $from->tables) as $table) {
+        $created = array_diff_key($to->tables, $from->tables);
+        foreach (array_filter($created, static fn (Table $table): bool => $table->inherits === null) as $table) {
             $this->builder->create($table->name, function (Blueprint $blueprint) use ($table, $to): void {
                 foreach ($table->columns as $column) {
                     $this->column($blueprint, $table, $column);
@@ -73,7 +76,15 @@ final readonly class SchemaWriter
             });
         }
 
+        foreach (array_filter($created, static fn (Table $table): bool => $table->inherits !== null) as $table) {
+            $this->connection->statement('create table '.$this->grammar->wrapTable($table->name).' () inherits ('.$this->grammar->wrapTable((string) $table->inherits).')');
+        }
+
         foreach (array_intersect_key($to->tables, $from->tables) as $name => $table) {
+            if ($table->inherits !== null) {
+                continue;
+            }
+
             $before = $from->tables[$name];
             $added = array_values(array_filter($table->columns, static fn (Column $column): bool => ! $before->hasColumn($column->name)));
             $removed = array_values(array_diff($before->columnNames(), $table->columnNames()));
@@ -167,7 +178,11 @@ final readonly class SchemaWriter
             return;
         }
 
-        $definition = $column->kind === ValueKind::Integer ? $blueprint->unsignedBigInteger($column->name) : $blueprint->string($column->name, 32);
+        $definition = match ($column->kind) {
+            ValueKind::Integer => $blueprint->unsignedBigInteger($column->name),
+            ValueKind::Text => $blueprint->string($column->name, 32),
+            ValueKind::Timestamp => $blueprint->timestamp($column->name),
+        };
         $definition->nullable($column->nullable);
 
         if ($column->default !== null) {
