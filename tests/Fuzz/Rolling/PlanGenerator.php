@@ -82,7 +82,8 @@ final class PlanGenerator
             $this->deploy($releases, $release);
         }
 
-        $this->endTransaction();
+        $this->endOutage();
+
         foreach ($this->state->pods as $pod => $release) {
             foreach ($this->reads[$release] ?? [] as $read) {
                 $this->emit(new PodStep($pod, $read));
@@ -115,11 +116,11 @@ final class PlanGenerator
 
         foreach ($previous as $pod) {
             if ($this->dice->chance(20)) {
-                $this->emit(new LifecycleStep($pod, Lifecycle::Restart));
+                $this->lifecycle($pod, Lifecycle::Restart);
                 $this->phase($releases);
             }
 
-            $this->emit(new LifecycleStep($pod, Lifecycle::Stop));
+            $this->lifecycle($pod, Lifecycle::Stop);
             $this->phase($releases);
         }
 
@@ -131,7 +132,7 @@ final class PlanGenerator
         if ($this->dice->chance(15)) {
             $rollback = $this->start($release->number - 1);
             $this->phase($releases);
-            $this->emit(new LifecycleStep($rollback, Lifecycle::Stop));
+            $this->lifecycle($rollback, Lifecycle::Stop);
         }
     }
 
@@ -141,12 +142,13 @@ final class PlanGenerator
     private function phase(array $releases): void
     {
         for ($i = 0; $i < $this->stepsPerPhase; $i++) {
-            match ($this->dice->weighted(['read' => 25, 'write' => 50, 'transaction' => 12, 'disturb' => 5, 'restart' => 3])) {
+            match ($this->dice->weighted(['read' => 25, 'write' => 50, 'transaction' => 12, 'disturb' => 5, 'restart' => 3, 'outage' => 4])) {
                 'read' => $this->read($releases, $this->dice->pick(array_keys($this->state->pods))),
                 'write' => $this->writeBetweenReads($releases),
                 'transaction' => $this->transaction(),
                 'disturb' => $this->disturb(),
-                'restart' => $this->emit(new LifecycleStep($this->dice->pick(array_keys($this->state->pods)), Lifecycle::Restart)),
+                'restart' => $this->lifecycle($this->dice->pick(array_keys($this->state->pods)), Lifecycle::Restart),
+                'outage' => $this->toggleOutage(),
             };
         }
     }
@@ -227,9 +229,42 @@ final class PlanGenerator
         $this->emit($this->state->allows($step) ? $step : new PodStep($holder, TransactionAction::Commit));
     }
 
+    /**
+     * Redis goes down, or comes back, outside a transaction.
+     */
+    private function toggleOutage(): void
+    {
+        $step = new DisturbStep($this->state->redisDown ? Disturbance::Recovery : Disturbance::Outage);
+
+        if ($this->state->allows($step)) {
+            $this->emit($step);
+        }
+    }
+
+    private function endOutage(): void
+    {
+        $this->endTransaction();
+
+        if ($this->state->redisDown) {
+            $this->emit(new DisturbStep(Disturbance::Recovery));
+        }
+    }
+
+    /**
+     * Stops or restarts the pod once Redis is up.
+     */
+    private function lifecycle(string $pod, Lifecycle $lifecycle): void
+    {
+        if ($this->state->redisDown) {
+            $this->endOutage();
+        }
+
+        $this->emit(new LifecycleStep($pod, $lifecycle));
+    }
+
     private function disturb(): void
     {
-        $this->emit(new DisturbStep($this->dice->pick(Disturbance::cases()), $this->dice->int(1, PHP_INT_MAX)));
+        $this->emit(new DisturbStep($this->dice->pick([Disturbance::Flush, Disturbance::Empty, Disturbance::Evict]), $this->dice->int(1, PHP_INT_MAX)));
     }
 
     private function migrate(int $schema): void
@@ -248,7 +283,7 @@ final class PlanGenerator
     private function start(int $release): string
     {
         $pod = 'p'.$this->pods++;
-        $this->emit(new LifecycleStep($pod, Lifecycle::Start, $release));
+        $this->emit(new LifecycleStep($pod, Lifecycle::Start, $release, $this->dice->chance(30)));
 
         return $pod;
     }

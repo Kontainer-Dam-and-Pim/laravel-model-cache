@@ -92,6 +92,41 @@ final class DependentTablesTest extends TestCase
         $this->assertSame(3, $events());
     }
 
+    public function testUpsertsInsertingRowsRefreshCachedReadsOfTablesTheirInsertTriggersWrite(): void
+    {
+        $events = fn (): int => DB::table('pet_events')->count();
+        $this->assertSame(2, $events());
+
+        DB::table('pets')->upsert([['id' => 3, 'owner_id' => 1, 'name' => 'new']], ['id'], ['name']);
+
+        $this->assertSame(3, $events());
+    }
+
+    public function testRawUpsertsInsertingRowsRefreshCachedReadsOfTablesTheirInsertTriggersWrite(): void
+    {
+        $events = fn (): int => DB::table('pet_events')->count();
+        $this->assertSame(2, $events());
+
+        $upsert = match (DB::connection()->getDriverName()) {
+            'mysql', 'mariadb' => 'insert into pets (id, owner_id, name) values (3, 1, ?) on duplicate key update name = values(name)',
+            default => 'insert into pets (id, owner_id, name) values (3, 1, ?) on conflict (id) do update set name = excluded.name',
+        };
+        DB::insert($upsert, ['new']);
+
+        $this->assertSame(3, $events());
+    }
+
+    public function testReplacesRefreshCachedReadsOfTablesTheirInsertTriggersWrite(): void
+    {
+        $this->requireDatabaseDriver('mysql', 'mariadb', 'sqlite');
+        $events = fn (): int => DB::table('pet_events')->count();
+        $this->assertSame(2, $events());
+
+        DB::insert('replace into pets (id, owner_id, name) values (3, 1, ?)', ['new']);
+
+        $this->assertSame(3, $events());
+    }
+
     public function testUpdatesKeepCachedReadsOfTablesOnlyInsertTriggersWrite(): void
     {
         DB::table('pet_events')->get();

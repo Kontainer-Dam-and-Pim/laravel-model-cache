@@ -1648,7 +1648,7 @@ final class ParserTest extends TestCase
         $statement = Parser::forSql(self::dialect('pgsql'), 'INSERT INTO t VALUES (1)')->parseWriteStatement();
 
         $this->assertInstanceOf(InsertStatement::class, $statement);
-        $this->assertNull(WriteTargets::assignedColumns($statement));
+        $this->assertNull(WriteTargets::conflictColumns($statement));
     }
 
     private static function dialect(string $name): Dialect
@@ -1663,8 +1663,8 @@ final class ParserTest extends TestCase
         return match (true) {
             $statement instanceof InsertStatement => 'INSERT '.$targets
                 .($statement->replacesRows ? ' REPLACING ROWS' : '')
-                .($statement->conflictAssignments === null ? '' : ' SET '.implode(', ', WriteTargets::assignedColumns($statement) ?? [])),
-            $statement instanceof UpdateStatement => "UPDATE {$targets} SET ".implode(', ', WriteTargets::assignedColumns($statement) ?? []),
+                .($statement->conflictAssignments === null ? '' : ' SET '.implode(', ', WriteTargets::conflictColumns($statement) ?? [])),
+            $statement instanceof UpdateStatement => "UPDATE {$targets} SET ".implode(', ', WriteTargets::assignedColumns($statement)),
             $statement instanceof DeleteStatement => "DELETE {$targets}",
             $statement instanceof TruncateStatement => "TRUNCATE {$targets}",
             $statement instanceof MergeStatement => "MERGE {$targets}",

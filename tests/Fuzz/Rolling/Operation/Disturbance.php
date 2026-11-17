@@ -14,4 +14,10 @@ enum Disturbance: string
 
     /** Redis evicts some keys under memory pressure. */
     case Evict = 'evict';
+
+    /** Redis stops answering every pod, as in an outage. */
+    case Outage = 'outage';
+
+    /** Redis answers again after an outage. */
+    case Recovery = 'recovery';
 }

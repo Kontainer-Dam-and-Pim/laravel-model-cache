@@ -5,39 +5,33 @@ declare(strict_types=1);
 namespace Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation;
 
 /**
- * A read of a table or view: its conditions, joined by AND or OR, optionally joined to the parent
- * a foreign key references, eager loading a relation, or counted.
+ * A read of a table or view: its conditions, joined by AND or OR, and its shape, with the foreign
+ * key, relation or other table the shape needs and the label it filters parents by.
  */
 final readonly class Read
 {
     /**
      * @param  list<Condition>  $conditions
-     * @param  string|null  $join  a foreign key of the table, whose parent's label the read adds
-     * @param  string|null  $with  a relation of the release's model to eager load
+     * @param  string|null  $subject  the foreign key, model relation or other table of the shape
+     * @param  string|null  $label  the label a shape filtering by one compares with
      */
     public function __construct(
         public Api $api,
         public string $relation,
         public array $conditions,
         public bool $or = false,
-        public ?string $join = null,
-        public ?string $with = null,
-        public bool $count = false,
+        public ReadShape $shape = ReadShape::Rows,
+        public ?string $subject = null,
+        public ?string $label = null,
     ) {}
 
     public function describe(): string
     {
         $where = $this->conditions === [] ? '' : ' where '.implode($this->or ? ' or ' : ' and ', array_map(static fn (Condition $condition): string => $condition->describe(), $this->conditions));
+        $subject = $this->subject === null ? '' : " of {$this->subject}";
+        $label = $this->label === null ? '' : " labelled {$this->label}";
 
-        return sprintf(
-            '%s %s %s%s%s%s',
-            $this->api->value,
-            $this->count ? 'count' : 'read',
-            $this->relation,
-            $this->join === null ? '' : " join parent of {$this->join}",
-            $this->with === null ? '' : " with {$this->with}",
-            $where,
-        );
+        return "{$this->api->value} {$this->shape->value}{$subject}{$label} {$this->relation}{$where}";
     }
 
     /**
@@ -50,9 +44,9 @@ final readonly class Read
             'relation' => $this->relation,
             'conditions' => array_map(static fn (Condition $condition): array => $condition->toArray(), $this->conditions),
             'or' => $this->or,
-            'join' => $this->join,
-            'with' => $this->with,
-            'count' => $this->count,
+            'shape' => $this->shape->value,
+            'subject' => $this->subject,
+            'label' => $this->label,
         ];
     }
 
@@ -61,6 +55,14 @@ final readonly class Read
      */
     public static function fromArray(array $data): self
     {
-        return new self(Api::from($data['api']), $data['relation'], array_map(Condition::fromArray(...), $data['conditions']), $data['or'], $data['join'], $data['with'], $data['count']);
+        return new self(
+            Api::from($data['api']),
+            $data['relation'],
+            array_map(Condition::fromArray(...), $data['conditions']),
+            $data['or'],
+            ReadShape::from($data['shape']),
+            $data['subject'],
+            $data['label'],
+        );
     }
 }

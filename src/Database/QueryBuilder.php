@@ -238,7 +238,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function upsert(array $values, array|string $uniqueBy, ?array $update = null)
     {
         $result = $this->runStatement(fn () => parent::upsert($values, $uniqueBy, $update));
-        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, Write::update(self::upsertedColumns($values, $update))->affecting($result), $values, AssignedColumns::unknown());
+        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, Write::upsert(self::upsertedColumns($values, $update))->affecting($result), $values, AssignedColumns::unknown());
 
         return $result;
     }

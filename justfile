@@ -69,12 +69,12 @@ fuzz *args: deps services
         just _suite "$driver" Fuzz {{args}}
     done
 
-# Run the multi-process suite, like several pods sharing one database and Redis.
+# Run pods of rolling deploys at once on every database. Tune it with MODEL_CACHE_FUZZ_RUNS.
 concurrency *args: deps services
     #!/usr/bin/env bash
     set -euo pipefail
     for client in phpredis predis; do
-        for driver in mysql pgsql; do
+        for driver in sqlite mysql mariadb pgsql; do
             echo "== concurrency $driver / $client"
             REDIS_CLIENT="$client" just _suite "$driver" Concurrency {{args}}
         done

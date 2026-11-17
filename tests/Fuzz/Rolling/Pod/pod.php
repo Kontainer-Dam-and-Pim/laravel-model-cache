@@ -5,4 +5,10 @@ use Kontainer\ModelCache\Tests\Fuzz\Rolling\Pod\Server;
 
 require dirname(__DIR__, 4).'/vendor/autoload.php';
 
-exit(Server::serve(STDIN, STDOUT));
+try {
+    exit(Server::serve(STDIN, STDOUT));
+} catch (Throwable $exception) {
+    fwrite(STDERR, (string) $exception);
+
+    exit(1);
+}

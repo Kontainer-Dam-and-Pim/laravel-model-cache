@@ -1,0 +1,436 @@
+{
+    "seed": 0,
+    "schemas": [
+        {
+            "tables": [
+                {
+                    "name": "audit",
+                    "columns": [
+                        {
+                            "name": "id",
+                            "kind": "int",
+                            "nullable": false,
+                            "default": null
+                        },
+                        {
+                            "name": "note",
+                            "kind": "text",
+                            "nullable": false,
+                            "default": "a"
+                        },
+                        {
+                            "name": "ref",
+                            "kind": "int",
+                            "nullable": true,
+                            "default": null
+                        }
+                    ],
+                    "primaryKey": [
+                        "id"
+                    ],
+                    "autoIncrement": true,
+                    "unique": []
+                },
+                {
+                    "name": "orders",
+                    "columns": [
+                        {
+                            "name": "id",
+                            "kind": "int",
+                            "nullable": false,
+                            "default": null
+                        },
+                        {
+                            "name": "label",
+                            "kind": "text",
+                            "nullable": false,
+                            "default": "a"
+                        },
+                        {
+                            "name": "ref",
+                            "kind": "text",
+                            "nullable": true,
+                            "default": null
+                        }
+                    ],
+                    "primaryKey": [
+                        "id"
+                    ],
+                    "autoIncrement": true,
+                    "unique": [
+                        "ref"
+                    ]
+                }
+            ],
+            "foreignKeys": [],
+            "views": [],
+            "triggers": []
+        }
+    ],
+    "releases": [
+        {
+            "number": 0,
+            "schema": {
+                "tables": [
+                    {
+                        "name": "audit",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "kind": "int",
+                                "nullable": false,
+                                "default": null
+                            },
+                            {
+                                "name": "note",
+                                "kind": "text",
+                                "nullable": false,
+                                "default": "a"
+                            },
+                            {
+                                "name": "ref",
+                                "kind": "int",
+                                "nullable": true,
+                                "default": null
+                            }
+                        ],
+                        "primaryKey": [
+                            "id"
+                        ],
+                        "autoIncrement": true,
+                        "unique": []
+                    },
+                    {
+                        "name": "orders",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "kind": "int",
+                                "nullable": false,
+                                "default": null
+                            },
+                            {
+                                "name": "label",
+                                "kind": "text",
+                                "nullable": false,
+                                "default": "a"
+                            },
+                            {
+                                "name": "ref",
+                                "kind": "text",
+                                "nullable": true,
+                                "default": null
+                            }
+                        ],
+                        "primaryKey": [
+                            "id"
+                        ],
+                        "autoIncrement": true,
+                        "unique": [
+                            "ref"
+                        ]
+                    }
+                ],
+                "foreignKeys": [],
+                "views": [],
+                "triggers": []
+            },
+            "models": [
+                {
+                    "table": "audit",
+                    "keyName": "id",
+                    "keyKind": "int",
+                    "incrementing": true,
+                    "relations": []
+                },
+                {
+                    "table": "orders",
+                    "keyName": "id",
+                    "keyKind": "int",
+                    "incrementing": true,
+                    "relations": []
+                }
+            ],
+            "config": {
+                "consider_rows": true,
+                "scope": "all",
+                "exclude_tables": []
+            }
+        },
+        {
+            "number": 1,
+            "schema": {
+                "tables": [
+                    {
+                        "name": "audit",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "kind": "int",
+                                "nullable": false,
+                                "default": null
+                            },
+                            {
+                                "name": "note",
+                                "kind": "text",
+                                "nullable": false,
+                                "default": "a"
+                            },
+                            {
+                                "name": "ref",
+                                "kind": "int",
+                                "nullable": true,
+                                "default": null
+                            }
+                        ],
+                        "primaryKey": [
+                            "id"
+                        ],
+                        "autoIncrement": true,
+                        "unique": []
+                    },
+                    {
+                        "name": "orders",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "kind": "int",
+                                "nullable": false,
+                                "default": null
+                            },
+                            {
+                                "name": "label",
+                                "kind": "text",
+                                "nullable": false,
+                                "default": "a"
+                            },
+                            {
+                                "name": "ref",
+                                "kind": "text",
+                                "nullable": true,
+                                "default": null
+                            }
+                        ],
+                        "primaryKey": [
+                            "id"
+                        ],
+                        "autoIncrement": true,
+                        "unique": [
+                            "ref"
+                        ]
+                    }
+                ],
+                "foreignKeys": [],
+                "views": [],
+                "triggers": []
+            },
+            "models": [
+                {
+                    "table": "audit",
+                    "keyName": "id",
+                    "keyKind": "int",
+                    "incrementing": true,
+                    "relations": []
+                },
+                {
+                    "table": "orders",
+                    "keyName": "ref",
+                    "keyKind": "text",
+                    "incrementing": false,
+                    "relations": []
+                }
+            ],
+            "config": {
+                "consider_rows": true,
+                "scope": "all",
+                "exclude_tables": []
+            }
+        }
+    ],
+    "steps": [
+        {
+            "type": "lifecycle",
+            "pod": "old",
+            "lifecycle": "start",
+            "release": 0,
+            "secondConnection": false
+        },
+        {
+            "type": "lifecycle",
+            "pod": "new",
+            "lifecycle": "start",
+            "release": 1,
+            "secondConnection": false
+        },
+        {
+            "type": "pod",
+            "pod": "old",
+            "read": null,
+            "write": {
+                "api": "builder",
+                "kind": "insert",
+                "table": "orders",
+                "conditions": [],
+                "rows": [
+                    {
+                        "id": 5,
+                        "label": "a",
+                        "ref": "k5"
+                    }
+                ],
+                "or": false,
+                "foreignKey": null,
+                "label": null
+            },
+            "transaction": null
+        },
+        {
+            "type": "pod",
+            "pod": "new",
+            "read": {
+                "api": "model",
+                "relation": "orders",
+                "conditions": [
+                    {
+                        "column": "ref",
+                        "operator": "=",
+                        "values": [
+                            "k5"
+                        ]
+                    }
+                ],
+                "or": false,
+                "shape": "rows",
+                "subject": null,
+                "label": null
+            },
+            "write": null,
+            "transaction": null
+        },
+        {
+            "type": "pod",
+            "pod": "old",
+            "read": {
+                "api": "model",
+                "relation": "orders",
+                "conditions": [
+                    {
+                        "column": "id",
+                        "operator": "=",
+                        "values": [
+                            5
+                        ]
+                    }
+                ],
+                "or": false,
+                "shape": "rows",
+                "subject": null,
+                "label": null
+            },
+            "write": null,
+            "transaction": null
+        },
+        {
+            "type": "pod",
+            "pod": "old",
+            "read": null,
+            "write": {
+                "api": "model",
+                "kind": "update",
+                "table": "orders",
+                "conditions": [
+                    {
+                        "column": "id",
+                        "operator": "=",
+                        "values": [
+                            5
+                        ]
+                    }
+                ],
+                "rows": [
+                    {
+                        "label": "b"
+                    }
+                ],
+                "or": false,
+                "foreignKey": null,
+                "label": null
+            },
+            "transaction": null
+        },
+        {
+            "type": "pod",
+            "pod": "new",
+            "read": {
+                "api": "model",
+                "relation": "orders",
+                "conditions": [
+                    {
+                        "column": "ref",
+                        "operator": "=",
+                        "values": [
+                            "k5"
+                        ]
+                    }
+                ],
+                "or": false,
+                "shape": "rows",
+                "subject": null,
+                "label": null
+            },
+            "write": null,
+            "transaction": null
+        },
+        {
+            "type": "pod",
+            "pod": "new",
+            "read": null,
+            "write": {
+                "api": "model",
+                "kind": "update",
+                "table": "orders",
+                "conditions": [
+                    {
+                        "column": "ref",
+                        "operator": "=",
+                        "values": [
+                            "k5"
+                        ]
+                    }
+                ],
+                "rows": [
+                    {
+                        "label": "c"
+                    }
+                ],
+                "or": false,
+                "foreignKey": null,
+                "label": null
+            },
+            "transaction": null
+        },
+        {
+            "type": "pod",
+            "pod": "old",
+            "read": {
+                "api": "model",
+                "relation": "orders",
+                "conditions": [
+                    {
+                        "column": "id",
+                        "operator": "=",
+                        "values": [
+                            5
+                        ]
+                    }
+                ],
+                "or": false,
+                "shape": "rows",
+                "subject": null,
+                "label": null
+            },
+            "write": null,
+            "transaction": null
+        }
+    ]
+}

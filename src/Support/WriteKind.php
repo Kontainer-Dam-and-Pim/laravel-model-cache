@@ -11,6 +11,12 @@ enum WriteKind
 {
     case Insert;
     case ColumnUpdate;
+
+    /** Inserts rows, updating the columns of those whose key exists. */
+    case Upsert;
+
+    /** Deletes the rows whose key exists and inserts the new ones, as `REPLACE` does. */
+    case Replace;
     case Delete;
     case Truncate;
     case Merge;
