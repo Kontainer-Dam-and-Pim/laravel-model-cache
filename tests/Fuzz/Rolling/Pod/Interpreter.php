@@ -16,13 +16,16 @@ use Kontainer\ModelCache\Tests\Fuzz\Rolling\App\Release;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Api;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Condition;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Operator;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\RawStyle;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Read;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\ReadShape;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\TransactionAction;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Write;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\WriteKind;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\ForeignKey;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\SchemaGenerator;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Table;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\ValueKind;
 use PDOException;
 
 /**
@@ -321,27 +324,176 @@ final readonly class Interpreter
 
     private function runRawWrite(Write $write): mixed
     {
-        $grammar = DB::connection()->getQueryGrammar();
-        $table = $grammar->wrapTable($write->table);
-        [$where, $bindings] = $this->conditionSql($write->conditions, $write->or, null);
+        if ($write->kind === WriteKind::Statements) {
+            return DB::unprepared($this->statements($write));
+        }
+
+        $sql = new RawSql($write->style ?? RawStyle::plain(), DB::connection()->getTablePrefix());
+        $table = $this->release->schema->table($write->table);
+        $returning = $sql->returning($sql->columns($table->primaryKey));
+        [$where, $bindings] = $sql->conditions($write->conditions, $write->or, null);
         $where = $where === '' ? '' : " where {$where}";
+        $run = static fn (string $statement, array $values, Closure $plain): mixed => $returning === '' ? $plain($sql->finish($statement), $values) : DB::select($sql->finish($statement.$returning), $values);
 
         return match ($write->kind) {
             WriteKind::Insert => array_map(
-                static fn (array $row): bool => DB::insert(
-                    "insert into {$table} (".implode(', ', array_map($grammar->wrap(...), array_keys($row))).') values ('.implode(', ', array_fill(0, count($row), '?')).')',
-                    array_values($row),
-                ),
+                fn (array $row): mixed => $run("insert into {$sql->table($write->table)} ({$sql->columns(array_keys($row))}) values (".self::placeholders($row).')', array_values($row), DB::insert(...)),
                 $write->rows,
             ),
-            WriteKind::Update => DB::update(
-                "update {$table} set ".implode(', ', array_map(static fn (string $column): string => $grammar->wrap($column).' = ?', array_keys($write->values())))."{$where}",
-                [...array_values($write->values()), ...$bindings],
+            WriteKind::Update => $run("update {$sql->table($write->table)} set {$this->assignments($sql, $write->values(), null)}{$where}", [...array_values($write->values()), ...$bindings], DB::update(...)),
+            WriteKind::Delete => $run("delete from {$sql->table($write->table)}{$where}", $bindings, DB::delete(...)),
+            WriteKind::Upsert => DB::insert($sql->finish($this->upsert($sql, $write, $table)), array_merge(...array_map(array_values(...), $write->rows))),
+            WriteKind::Replace => DB::insert(
+                $sql->finish(($this->driver() === 'sqlite' && $write->style?->quoting->value !== 'none' ? 'insert or replace into ' : 'replace into ')
+                    ."{$sql->table($write->table)} ({$sql->columns(array_keys($write->values()))}) values ".self::rowsPlaceholders($write->rows)),
+                array_merge(...array_map(array_values(...), $write->rows)),
             ),
-            WriteKind::Delete => DB::delete("delete from {$table}{$where}", $bindings),
-            WriteKind::Statements => DB::unprepared($this->statements($write)),
+            WriteKind::UpdateJoined => DB::update(...$this->updateJoined($sql, $write)),
+            WriteKind::DeleteWhereParentExists => DB::delete(...$this->deleteJoined($sql, $write)),
+            WriteKind::CteDelete => DB::delete(
+                $sql->finish("with doomed as (select {$sql->column($table->primaryKey[0])} from {$sql->table($write->table)}{$where}) delete from {$sql->table($write->table)}"
+                    ." where {$sql->column($table->primaryKey[0])} in (select {$sql->column($table->primaryKey[0])} from doomed)"),
+                $bindings,
+            ),
+            WriteKind::Merge => DB::affectingStatement(...$this->merge($sql, $write, $table)),
             default => throw new \LogicException("No raw form of {$write->kind->value}"),
         };
+    }
+
+    private function driver(): string
+    {
+        return DB::connection()->getDriverName();
+    }
+
+    /**
+     * @param  array<string, int|string|null>  $values
+     */
+    private function assignments(RawSql $sql, array $values, ?string $qualifier): string
+    {
+        return implode(', ', array_map(static fn (string $column): string => "{$sql->column($column, $qualifier)} = ?", array_keys($values)));
+    }
+
+    /**
+     * @param  array<mixed>  $row
+     */
+    private static function placeholders(array $row): string
+    {
+        return implode(', ', array_fill(0, count($row), '?'));
+    }
+
+    /**
+     * @param  list<array<string, int|string|null>>  $rows
+     */
+    private static function rowsPlaceholders(array $rows): string
+    {
+        return implode(', ', array_map(static fn (array $row): string => '('.self::placeholders($row).')', $rows));
+    }
+
+    /**
+     * An insert updating the label and amount of the rows whose key exists, in the database's
+     * own syntax, or leaving them as they are when it gives neither.
+     */
+    private function upsert(RawSql $sql, Write $write, Table $table): string
+    {
+        $updated = array_values(array_intersect(['label', 'amount'], array_keys($write->values())));
+        $insert = "insert into {$sql->table($write->table)} ({$sql->columns(array_keys($write->values()))}) values ".self::rowsPlaceholders($write->rows);
+
+        if (in_array($this->driver(), ['mysql', 'mariadb'], true)) {
+            $assignments = $updated === []
+                ? "{$sql->column($table->primaryKey[0])} = {$sql->column($table->primaryKey[0])}"
+                : implode(', ', array_map(static fn (string $column): string => "{$sql->column($column)} = values({$sql->column($column)})", $updated));
+
+            return "{$insert} on duplicate key update {$assignments}";
+        }
+
+        return $updated === []
+            ? "{$insert} on conflict ({$sql->columns($table->primaryKey)}) do nothing"
+            : "{$insert} on conflict ({$sql->columns($table->primaryKey)}) do update set ".implode(', ', array_map(static fn (string $column): string => "{$sql->column($column)} = excluded.{$sql->column($column)}", $updated));
+    }
+
+    /**
+     * An update of the rows whose parent has the label, joined to it as the database spells it.
+     *
+     * @return array{string, list<int|string|null>}
+     */
+    private function updateJoined(RawSql $sql, Write $write): array
+    {
+        $foreignKey = $this->release->schema->foreignKey((string) $write->foreignKey);
+        [$child, $parent] = [$sql->alias('c'), $sql->alias('p')];
+        $on = self::joinCondition($sql, $foreignKey, $child, $parent);
+        [$where, $bindings] = $sql->conditions($write->conditions, $write->or, $child);
+        $where = $where === '' ? '' : " and {$where}";
+        $values = array_values($write->values());
+
+        if (in_array($this->driver(), ['mysql', 'mariadb'], true)) {
+            return [$sql->finish("update {$sql->table($write->table)} as {$child} join {$sql->table($foreignKey->parent)} as {$parent} on {$on}"
+                ." set {$this->assignments($sql, $write->values(), $child)} where {$sql->column('label', $parent)} = ?{$where}"), [...$values, $write->label, ...$bindings]];
+        }
+
+        return [$sql->finish("update {$sql->table($write->table)} as {$child} set {$this->assignments($sql, $write->values(), null)}"
+            ." from {$sql->table($foreignKey->parent)} as {$parent} where {$on} and {$sql->column('label', $parent)} = ?{$where}"), [...$values, $write->label, ...$bindings]];
+    }
+
+    /**
+     * A delete of the rows whose parent has the label, as the database spells a delete through
+     * another table.
+     *
+     * @return array{string, list<int|string|null>}
+     */
+    private function deleteJoined(RawSql $sql, Write $write): array
+    {
+        $foreignKey = $this->release->schema->foreignKey((string) $write->foreignKey);
+        $parent = $sql->alias('p');
+
+        if ($this->driver() === 'sqlite') {
+            $table = $sql->table($write->table);
+            [$where, $bindings] = $sql->conditions($write->conditions, $write->or, $table);
+
+            return [$sql->finish("delete from {$table} where exists (select 1 from {$sql->table($foreignKey->parent)} as {$parent} where "
+                .self::joinCondition($sql, $foreignKey, $table, $parent)." and {$sql->column('label', $parent)} = ?)".($where === '' ? '' : " and {$where}")), [$write->label, ...$bindings]];
+        }
+
+        $child = $sql->alias('c');
+        [$where, $bindings] = $sql->conditions($write->conditions, $write->or, $child);
+        $where = $where === '' ? '' : " and {$where}";
+        $on = self::joinCondition($sql, $foreignKey, $child, $parent);
+
+        return [$sql->finish(in_array($this->driver(), ['mysql', 'mariadb'], true)
+            ? "delete {$child} from {$sql->table($write->table)} as {$child} join {$sql->table($foreignKey->parent)} as {$parent} on {$on} where {$sql->column('label', $parent)} = ?{$where}"
+            : "delete from {$sql->table($write->table)} as {$child} using {$sql->table($foreignKey->parent)} as {$parent} where {$on} and {$sql->column('label', $parent)} = ?{$where}"), [$write->label, ...$bindings]];
+    }
+
+    private static function joinCondition(RawSql $sql, ForeignKey $foreignKey, string $child, string $parent): string
+    {
+        return implode(' and ', array_map(
+            static fn (string $column, string $parentColumn): string => "{$sql->column($column, $child)} = {$sql->column($parentColumn, $parent)}",
+            $foreignKey->childColumns,
+            $foreignKey->parentColumns,
+        ));
+    }
+
+    /**
+     * A PostgreSQL `MERGE` of the row: updating its label and amount when its key exists,
+     * inserting it otherwise. The values are cast to the columns' types, which a `VALUES` list
+     * does not know.
+     *
+     * @return array{string, list<int|string|null>}
+     */
+    private function merge(RawSql $sql, Write $write, Table $table): array
+    {
+        $row = $write->values();
+        $columns = array_keys($row);
+        $key = $table->primaryKey[0];
+        [$target, $source] = [$sql->alias('t'), $sql->alias('s')];
+        $casts = implode(', ', array_map(static fn (string $column): string => 'cast(? as '.($table->column($column)->kind === ValueKind::Integer ? 'bigint' : 'varchar').')', $columns));
+        $updated = array_values(array_intersect(['label', 'amount'], $columns));
+        $matched = $updated === []
+            ? 'do nothing'
+            : 'update set '.implode(', ', array_map(static fn (string $column): string => "{$sql->column($column)} = {$sql->column($column, $source)}", $updated));
+
+        return [$sql->finish("merge into {$sql->table($write->table)} as {$target} using (values ({$casts})) as {$source} ({$sql->columns($columns)})"
+            ." on {$sql->column($key, $target)} = {$sql->column($key, $source)} when matched then {$matched}"
+            ." when not matched then insert ({$sql->columns($columns)}) values ({$sql->columns($columns, $source)})"), array_values($row)];
     }
 
     /**

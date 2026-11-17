@@ -8,12 +8,16 @@ use Kontainer\ModelCache\Tests\Fuzz\Rolling\App\RelationKind;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\App\Release;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Api;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Condition;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\KeywordCase;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Operator;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Quoting;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\RawStyle;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Read;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\ReadShape;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Write;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\WriteKind;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Column;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Driver;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\ForeignKey;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Identifier;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Schema;
@@ -32,7 +36,10 @@ final readonly class OperationGenerator
 
     private const int SEEDED_KEYS = 4;
 
-    public function __construct(private Dice $dice) {}
+    public function __construct(
+        private Dice $dice,
+        private Driver $driver,
+    ) {}
 
     /**
      * @param  string|null  $table  the table to read, a random table or view when null
@@ -119,29 +126,59 @@ final readonly class OperationGenerator
             WriteKind::UpdateOrInsert->value => 3,
             WriteKind::Statements->value => 2,
             ...($this->parentKeys($release, $table) === [] ? [] : [WriteKind::UpdateJoined->value => 3, WriteKind::DeleteWhereParentExists->value => 2]),
+            ...($this->driver->isMySqlFamily() || $this->driver === Driver::Sqlite ? [WriteKind::Replace->value => 2] : []),
+            ...(count($table->primaryKey) === 1 && $this->driver !== Driver::MariaDb ? [WriteKind::CteDelete->value => 2] : []),
+            ...(count($table->primaryKey) === 1 && $this->driver === Driver::PgSql ? [WriteKind::Merge->value => 2] : []),
         ];
         $kind = WriteKind::from($this->dice->weighted($kinds));
         $api = $this->dice->pick(match ($kind) {
-            WriteKind::Insert, WriteKind::Update, WriteKind::Delete => [Api::Builder, Api::Raw, Api::Model],
-            WriteKind::Upsert, WriteKind::Increment, WriteKind::IncrementEach => [Api::Builder, Api::Model],
+            WriteKind::Insert, WriteKind::Update, WriteKind::Delete, WriteKind::Upsert => [Api::Builder, Api::Raw, Api::Model],
+            WriteKind::Increment, WriteKind::IncrementEach => [Api::Builder, Api::Model],
             WriteKind::Save, WriteKind::DeleteModel => [Api::Model],
-            WriteKind::Statements => [Api::Raw],
-            WriteKind::InsertGetId, WriteKind::InsertOrIgnore, WriteKind::Truncate, WriteKind::InsertUsing,
-            WriteKind::UpdateOrInsert, WriteKind::UpdateJoined, WriteKind::DeleteWhereParentExists => [Api::Builder],
+            WriteKind::Statements, WriteKind::Replace, WriteKind::CteDelete, WriteKind::Merge => [Api::Raw],
+            WriteKind::UpdateJoined, WriteKind::DeleteWhereParentExists => [Api::Builder, Api::Raw],
+            WriteKind::InsertGetId, WriteKind::InsertOrIgnore, WriteKind::Truncate, WriteKind::InsertUsing, WriteKind::UpdateOrInsert => [Api::Builder],
         });
+        $write = $this->unstyledWrite($release, $table, $kind, $api);
 
+        return $api === Api::Raw && $kind !== WriteKind::Statements ? $write->styled($this->style($kind)) : $write;
+    }
+
+    private function unstyledWrite(Release $release, Table $table, WriteKind $kind, Api $api): Write
+    {
         return match ($kind) {
             WriteKind::Insert, WriteKind::InsertOrIgnore => new Write($api, $kind, $table->name, [], $this->rows($release, $table, false)),
             WriteKind::InsertGetId => new Write($api, $kind, $table->name, [], [$this->row($release, $table, false)]),
-            WriteKind::Upsert => new Write($api, $kind, $table->name, [], $this->rows($release, $table, true)),
+            WriteKind::Upsert, WriteKind::Replace => new Write($api, $kind, $table->name, [], $this->rows($release, $table, true)),
+            WriteKind::Merge => new Write($api, $kind, $table->name, [], [$this->row($release, $table, true)]),
             WriteKind::Truncate => new Write($api, $kind, $table->name, [], []),
             WriteKind::Increment, WriteKind::IncrementEach => new Write($api, $kind, $table->name, $this->conditions($release, $table, $api, $this->dice->int(0, 2)), [['amount' => $this->dice->int(1, 2)]]),
-            WriteKind::Delete, WriteKind::DeleteModel, WriteKind::InsertUsing => $this->conditionalWrite($release, $table, $api, $kind, []),
+            WriteKind::Delete, WriteKind::DeleteModel, WriteKind::InsertUsing, WriteKind::CteDelete => $this->conditionalWrite($release, $table, $api, $kind, []),
             WriteKind::Update, WriteKind::Save, WriteKind::Statements => $this->conditionalWrite($release, $table, $api, $kind, $this->assignments($table)),
             WriteKind::UpdateOrInsert => new Write($api, $kind, $table->name, $this->keyConditions($table), [$this->assignments($table)]),
             WriteKind::UpdateJoined => $this->conditionalWrite($release, $table, $api, $kind, $this->assignments($table))->joinedTo($this->dice->pick($this->parentKeys($release, $table)), $this->dice->pick(self::LABELS)),
             WriteKind::DeleteWhereParentExists => $this->conditionalWrite($release, $table, $api, $kind, [])->joinedTo($this->dice->pick($this->parentKeys($release, $table)), $this->dice->pick(self::LABELS)),
         };
+    }
+
+    /**
+     * A spelling of a hand-written statement the database accepts: quoting, keyword case,
+     * comments and whitespace, and `RETURNING` where the database has it for the statement.
+     */
+    private function style(WriteKind $kind): RawStyle
+    {
+        $comments = ['', '', "-- note\n", '/* job */ ', ...($this->driver->isMySqlFamily() ? ["# note\n"] : [])];
+        $returns = in_array($kind, [WriteKind::Insert, WriteKind::Update, WriteKind::Delete], true)
+            && ($this->driver === Driver::PgSql || $this->driver === Driver::Sqlite);
+
+        return new RawStyle(
+            $this->dice->pick(Quoting::supportedBy($this->driver)),
+            $this->dice->pick(KeywordCase::cases()),
+            $this->dice->pick($comments),
+            $this->dice->pick(['', '', ';', ' -- done', "\n"]),
+            $this->dice->chance(30),
+            $returns && $this->dice->chance(30),
+        );
     }
 
     /**

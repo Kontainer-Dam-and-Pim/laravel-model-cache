@@ -22,6 +22,7 @@ use Kontainer\ModelCache\Tests\Fuzz\Rolling\OperationGenerator;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Pod\Interpreter;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Pod\ModelSource;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Column;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Driver;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\ForeignKey;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Rule;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Schema;
@@ -55,7 +56,7 @@ final class RoundTripContractTest extends TestCase
         }
 
         $interpreter = new Interpreter($release);
-        foreach ((new OperationGenerator(new Dice(1)))->seed($release) as $write) {
+        foreach ((new OperationGenerator(new Dice(1), Driver::of(DB::connection()->getDriverName())))->seed($release) as $write) {
             $interpreter->write($write);
         }
 

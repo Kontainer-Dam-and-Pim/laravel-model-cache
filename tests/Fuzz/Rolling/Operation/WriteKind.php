@@ -37,4 +37,13 @@ enum WriteKind: string
 
     /** Two updates in one `DB::unprepared()` call. */
     case Statements = 'statements';
+
+    /** `REPLACE INTO`, deleting the rows whose key exists before inserting. */
+    case Replace = 'replace';
+
+    /** A delete of the rows a common table expression selects. */
+    case CteDelete = 'cteDelete';
+
+    /** `MERGE`, updating the row with the key or inserting it. */
+    case Merge = 'merge';
 }
