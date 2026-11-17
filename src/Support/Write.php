@@ -10,7 +10,9 @@ namespace Kontainer\ModelCache\Support;
  * the triggers of its event (an update only those of the columns it assigns); and when it changes
  * rows it fires foreign keys: a delete their delete rules, an update their update rules for the
  * referenced columns it assigns, and a truncate empties every referencing table, as PostgreSQL's
- * `TRUNCATE ... CASCADE` does whatever the rules say.
+ * `TRUNCATE ... CASCADE` does whatever the rules say. An upsert inserts rows and updates others,
+ * so it fires insert triggers besides what the update fires; a replace deletes rows and inserts
+ * others, so it fires insert triggers besides what the delete fires.
  *
  * Each dependents field names, for one table, everything one of these effects changes; a write
  * looks up the fields that together cover it.
@@ -18,7 +20,7 @@ namespace Kontainer\ModelCache\Support;
 final readonly class Write
 {
     /**
-     * @param  list<string>  $columns  the assigned columns of a `WriteKind::ColumnUpdate`, empty otherwise
+     * @param  list<string>  $columns  the assigned columns of a `WriteKind::ColumnUpdate` or `WriteKind::Upsert`, empty otherwise
      * @param  bool  $changesRows  false when the database reported no affected rows, which fire no foreign key
      * @param  array{table: string, column: string, keys: ColumnKeys}|null  $deletedKeys  the primary key values a delete is pinned to
      */
@@ -39,12 +41,39 @@ final readonly class Write
      */
     public static function update(array $columns): self
     {
+        return new self(WriteKind::ColumnUpdate, self::columnNames($columns));
+    }
+
+    /**
+     * An insert that updates the rows whose key exists, assigning the columns.
+     *
+     * @param  array<int|string>  $columns  assigned columns, optionally qualified or with a JSON path
+     */
+    public static function upsert(array $columns): self
+    {
+        return new self(WriteKind::Upsert, self::columnNames($columns));
+    }
+
+    /**
+     * An insert that deletes the rows whose key exists first, as `REPLACE` does.
+     */
+    public static function replace(): self
+    {
+        return new self(WriteKind::Replace);
+    }
+
+    /**
+     * @param  array<int|string>  $columns
+     * @return list<string>
+     */
+    private static function columnNames(array $columns): array
+    {
         $names = [];
         foreach ($columns as $column) {
             $names[self::columnName((string) $column)] = true;
         }
 
-        return new self(WriteKind::ColumnUpdate, array_map('strval', array_keys($names)));
+        return array_map('strval', array_keys($names));
     }
 
     public static function delete(): self
@@ -122,7 +151,8 @@ final readonly class Write
     {
         $rowFields = $this->changesRows ? match ($this->kind) {
             WriteKind::Insert => [],
-            WriteKind::ColumnUpdate => array_map(static fn (string $column): string => self::columnUpdateField($table, $column), $this->columns),
+            WriteKind::ColumnUpdate, WriteKind::Upsert => array_map(static fn (string $column): string => self::columnUpdateField($table, $column), $this->columns),
+            WriteKind::Replace => [self::deleteField($table)],
             WriteKind::Delete => $this->deletedKeys !== null && $this->deletedKeys['table'] === $table ? [] : [self::deleteField($table)],
             WriteKind::Truncate => [self::truncateField($table)],
             WriteKind::Merge => [self::deleteField($table), self::anyUpdateField($table)],
@@ -135,6 +165,12 @@ final readonly class Write
                 self::triggerField(TriggerEvent::Update, $table),
                 ...array_map(static fn (string $column): string => self::columnTriggerField($table, $column), $this->columns),
             ],
+            WriteKind::Upsert => [
+                self::triggerField(TriggerEvent::Insert, $table),
+                self::triggerField(TriggerEvent::Update, $table),
+                ...array_map(static fn (string $column): string => self::columnTriggerField($table, $column), $this->columns),
+            ],
+            WriteKind::Replace => [self::triggerField(TriggerEvent::Insert, $table), self::triggerField(TriggerEvent::Delete, $table)],
             WriteKind::Delete => [self::triggerField(TriggerEvent::Delete, $table)],
             WriteKind::Truncate => [self::triggerField(TriggerEvent::Truncate, $table), self::triggerField(TriggerEvent::Delete, $table)],
             WriteKind::Merge => [

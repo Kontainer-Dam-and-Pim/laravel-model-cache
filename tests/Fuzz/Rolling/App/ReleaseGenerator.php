@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache\Tests\Fuzz\Rolling\App;
 
+use Kontainer\ModelCache\ExpirationPolicy;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Dice;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\ForeignKey;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Schema;
@@ -26,6 +27,7 @@ final readonly class ReleaseGenerator
             'consider_rows' => ! $this->dice->chance(10),
             'scope' => $this->dice->chance(15) ? 'models' : 'all',
             'exclude_tables' => $this->dice->chance(15) ? [$this->dice->pick(array_keys($schema->tables))] : [],
+            'expiration_time' => $this->expirationTime(),
         ]);
     }
 
@@ -49,7 +51,19 @@ final readonly class ReleaseGenerator
             $config['exclude_tables'] = $this->dice->some(array_keys($schema->tables), 1);
         }
 
+        if ($this->dice->chance(20)) {
+            $config['expiration_time'] = $this->expirationTime();
+        }
+
         return new Release($previous->number + 1, $schema, $this->models($schema, $previous), $config);
+    }
+
+    /**
+     * Mostly the default, sometimes no expiration at all.
+     */
+    private function expirationTime(): int
+    {
+        return $this->dice->chance(15) ? 0 : ExpirationPolicy::DEFAULT_SECONDS;
     }
 
     /**

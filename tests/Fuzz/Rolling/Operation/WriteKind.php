@@ -20,4 +20,21 @@ enum WriteKind: string
 
     /** A model found by the conditions and deleted. */
     case DeleteModel = 'deleteModel';
+
+    /** Copies the label of the selected rows into the audit table, by `insertUsing()`. */
+    case InsertUsing = 'insertUsing';
+
+    /** Updates the row with the key, or inserts it, by `updateOrInsert()`. */
+    case UpdateOrInsert = 'updateOrInsert';
+
+    /** Updates rows whose parent has the label, joined to it. */
+    case UpdateJoined = 'updateJoined';
+
+    /** Deletes rows whose parent has the label, by `whereExists()`. */
+    case DeleteWhereParentExists = 'deleteWhereParentExists';
+
+    case IncrementEach = 'incrementEach';
+
+    /** Two updates in one `DB::unprepared()` call. */
+    case Statements = 'statements';
 }

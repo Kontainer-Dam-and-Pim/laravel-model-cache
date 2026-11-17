@@ -7,6 +7,7 @@ namespace Kontainer\ModelCache\Tests\Fuzz\Rolling\Pod;
 use Illuminate\Support\Facades\DB;
 use Kontainer\ModelCache\ModelCacheServiceProvider;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\App\Release;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Connectivity;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Read;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\TransactionAction;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Write;
@@ -36,6 +37,7 @@ final class Server
         eval(ModelSource::of($release));
         self::limitLockWaits();
         $interpreter = new Interpreter($release);
+        $outage = new Outage;
         self::send($output, ['ready' => getmypid()]);
 
         while (($message = self::receive($input)) !== null) {
@@ -43,6 +45,12 @@ final class Server
                 isset($message['read']) => $interpreter->read(Read::fromArray($message['read'])),
                 isset($message['write']) => $interpreter->write(Write::fromArray($message['write'])),
                 isset($message['transaction']) => $interpreter->transaction(TransactionAction::from($message['transaction'])),
+                isset($message['batch']) => self::batch($interpreter, $message['batch']),
+                isset($message['connectivity']) => (static function () use ($outage, $message): array {
+                    Connectivity::from($message['connectivity']) === Connectivity::Lost ? $outage->begin() : $outage->end();
+
+                    return ['result' => true];
+                })(),
                 default => throw new UnexpectedValueException('Unknown pod message '.json_encode($message)),
             });
         }
@@ -50,6 +58,25 @@ final class Server
         $app->terminate();
 
         return 0;
+    }
+
+    /**
+     * Runs the steps in order, then commits what they left open, as a request ends, so the pod
+     * holds no locks while it waits for the others.
+     *
+     * @param  list<array<string, mixed>>  $steps
+     * @return list<array<string, mixed>>
+     */
+    private static function batch(Interpreter $interpreter, array $steps): array
+    {
+        $outcomes = array_map(static fn (array $step): array => match (true) {
+            isset($step['read']) => $interpreter->read(Read::fromArray($step['read'])),
+            isset($step['write']) => $interpreter->write(Write::fromArray($step['write'])),
+            default => $interpreter->transaction(TransactionAction::from($step['transaction'])),
+        }, $steps);
+        $interpreter->settle();
+
+        return $outcomes;
     }
 
     /**

@@ -217,19 +217,23 @@ final class RawStatementClassifier
     private static function write(InsertStatement|UpdateStatement|DeleteStatement|TruncateStatement|MergeStatement $statement): Write
     {
         return match (true) {
-            $statement instanceof InsertStatement && $statement->replacesRows, $statement instanceof DeleteStatement => Write::delete(),
-            $statement instanceof InsertStatement, $statement instanceof UpdateStatement => self::assigning(WriteTargets::assignedColumns($statement)),
+            $statement instanceof InsertStatement && $statement->replacesRows => Write::replace(),
+            $statement instanceof DeleteStatement => Write::delete(),
+            $statement instanceof InsertStatement => self::inserting(WriteTargets::conflictColumns($statement)),
+            $statement instanceof UpdateStatement => Write::update(WriteTargets::assignedColumns($statement)),
             $statement instanceof TruncateStatement => Write::truncate(),
             $statement instanceof MergeStatement => Write::merge(),
         };
     }
 
     /**
+     * An insert, or an upsert when it assigns columns of the rows whose key exists.
+     *
      * @param  list<string>|null  $columns
      */
-    private static function assigning(?array $columns): Write
+    private static function inserting(?array $columns): Write
     {
-        return $columns === null ? Write::insert() : Write::update($columns);
+        return $columns === null ? Write::insert() : Write::upsert($columns);
     }
 
     /**

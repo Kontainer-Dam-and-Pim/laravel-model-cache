@@ -28,19 +28,32 @@ final class WriteTargets
     }
 
     /**
-     * The columns an update or upsert assigns, without their qualifiers; null when it assigns
-     * none of existing rows.
+     * The columns an update assigns, without their qualifiers.
+     *
+     * @return list<string>
+     */
+    public static function assignedColumns(UpdateStatement $statement): array
+    {
+        return self::columnsOf($statement->assignments);
+    }
+
+    /**
+     * The columns an upsert assigns to the rows whose key exists, without their qualifiers; null
+     * for an insert assigning none.
      *
      * @return list<string>|null
      */
-    public static function assignedColumns(InsertStatement|UpdateStatement $statement): ?array
+    public static function conflictColumns(InsertStatement $statement): ?array
     {
-        $assignments = $statement instanceof InsertStatement ? $statement->conflictAssignments : $statement->assignments;
+        return $statement->conflictAssignments === null ? null : self::columnsOf($statement->conflictAssignments);
+    }
 
-        if ($assignments === null) {
-            return null;
-        }
-
+    /**
+     * @param  list<Assignment>  $assignments
+     * @return list<string>
+     */
+    private static function columnsOf(array $assignments): array
+    {
         $columns = [];
         foreach ($assignments as $assignment) {
             foreach ($assignment->targets as $target) {

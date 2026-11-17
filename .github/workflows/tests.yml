@@ -126,6 +126,8 @@ jobs:
           - { suite: Fuzz, database: mariadb, redis-client: predis }
           - { suite: Fuzz, database: pgsql, redis-client: phpredis }
           - { suite: Fuzz, database: pgsql, redis-client: predis }
+          - { suite: Concurrency, database: sqlite, redis-client: phpredis }
+          - { suite: Concurrency, database: mariadb, redis-client: phpredis }
           - { suite: Concurrency, database: mysql, redis-client: phpredis }
           - { suite: Concurrency, database: mysql, redis-client: predis }
           - { suite: Concurrency, database: pgsql, redis-client: phpredis }
@@ -136,7 +138,7 @@ jobs:
       REDIS_CLIENT: ${{ matrix.redis-client }}
       SUITE: ${{ matrix.suite }}
       MODEL_CACHE_FUZZ_ITERATIONS: ${{ matrix.suite == 'Fuzz' && '3000' || '' }}
-      MODEL_CACHE_FUZZ_RUNS: ${{ matrix.suite == 'Fuzz' && (github.event_name == 'schedule' && '40' || '10') || '' }}
+      MODEL_CACHE_FUZZ_RUNS: ${{ (matrix.suite == 'Fuzz' || matrix.suite == 'Concurrency') && (github.event_name == 'schedule' && '40' || '10') || '' }}
 
     steps:
       - uses: actions/checkout@v7
@@ -155,7 +157,7 @@ jobs:
         run: vendor/bin/phpunit --no-coverage --testsuite "$SUITE"
 
       - name: Upload shrunk failing deploys
-        if: failure() && matrix.suite == 'Fuzz'
+        if: failure() && (matrix.suite == 'Fuzz' || matrix.suite == 'Concurrency')
         uses: actions/upload-artifact@v7
         with:
           name: failing-deploys-${{ matrix.database }}-${{ matrix.redis-client }}

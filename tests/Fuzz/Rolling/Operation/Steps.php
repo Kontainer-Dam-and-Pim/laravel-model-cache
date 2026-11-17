@@ -19,7 +19,7 @@ final class Steps
                 $data['write'] !== null => Write::fromArray($data['write']),
                 default => TransactionAction::from($data['transaction']),
             }),
-            'lifecycle' => new LifecycleStep($data['pod'], Lifecycle::from($data['lifecycle']), $data['release']),
+            'lifecycle' => new LifecycleStep($data['pod'], Lifecycle::from($data['lifecycle']), $data['release'], $data['secondConnection']),
             'migrate' => new MigrateStep($data['schema']),
             'disturb' => new DisturbStep(Disturbance::from($data['disturbance']), $data['seed']),
             default => throw new UnexpectedValueException('Unknown step '.json_encode($data)),

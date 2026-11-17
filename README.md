@@ -251,7 +251,7 @@ Inside a transaction, the retire happens again at commit. A query that started b
 
 **Redis failures never break database access.** A failed cache operation is logged and the query runs against the database. After a failure, Redis is skipped for 30 seconds. That skip lasts the worker's lifetime under Octane or FrankenPHP, and is shared across PHP-FPM processes through APCu when it is installed.
 
-**Failed invalidations are replayed.** An invalidation Redis rejects is kept and logged as an error, and reads bypass the cache until it is replayed. Replay happens before the cache is used again, and again when the request, job or worker ends. Under PHP-FPM, pending invalidations are shared through APCu. Very large backlogs retire the whole cache instead.
+**Failed invalidations are replayed.** An invalidation Redis rejects is kept and logged as an error, and that host's reads bypass the cache until it is replayed. Hosts that still reach Redis do not learn of it in the meantime (see [Limitations](#limitations)). Replay happens before the cache is used again, and again when the request, job or worker ends. Under PHP-FPM, pending invalidations are shared through APCu. Very large backlogs retire the whole cache instead.
 
 **A replaced Redis server is detected.** A restarted server or a promoted replica may have lost recent invalidations. The cache records the server's run id and retires the generation the first time a store or invalidation reaches a different server. Lookups check this on each process's first lookup and then every 5 seconds.
 
@@ -394,6 +394,7 @@ The cache pays off when the database is a server and the query does real work. S
 ## Limitations
 
 - Redis Cluster is not supported, because each operation is one Lua script that touches keys of several tags.
+- A host that cannot reach Redis while other hosts can, as in a network partition, cannot invalidate their entries. Its own reads bypass the cache until it replays the invalidations Redis rejected, but other hosts keep serving what they cached of the tables it wrote until then, or until those entries expire. Invalidations a host still holds when it stops before Redis answers again are lost. Run `model-cache:flush` after such an outage.
 - Writes that bypass Laravel's connection are not seen. This includes other applications, database consoles and `DB::connection()->getPdo()`. Use `model-cache:invalidate` or `model-cache:flush` after them.
 - Row-level tagging needs a single-column primary key of an integer, decimal, text or UUID type. Composite keys and other types fall back to table-level tags, as do all reads before a write has read the schema in the current generation.
 - Third-party packages with their own query builder classes bypass the cache.
@@ -457,7 +458,7 @@ just test-mysql                 # also test-mariadb, test-pgsql
 just test-matrix                # every database with phpredis and Predis
 just test --filter=RowKeysTest
 just fuzz                       # MODEL_CACHE_FUZZ_ITERATIONS, MODEL_CACHE_FUZZ_RUNS, MODEL_CACHE_FUZZ_SEED
-just concurrency                # forked workers sharing one database and Redis
+just concurrency                # pods of rolling deploys racing on one database and Redis
 just coverage                   # Unit and Integration on every database, fails below 100% line coverage
 just bench
 just format                     # Pint
@@ -469,7 +470,7 @@ just lint analyse               # Pint check and PHPStan
 | Unit        | Individual classes |
 | Integration | Behaviour against a real database and Redis |
 | Fuzz        | Seeded random workloads, schemas, migrations and rolling deploys, comparing every cached read with the uncached query |
-| Concurrency | Parallel processes, checking cached reads against the database afterwards |
+| Concurrency | Pods of rolling deploys running at once, checking every read whenever they pause |
 | Benchmark   | Throughput with and without the cache, and Redis commands per cached read |
 
 CI fails unless the Unit and Integration suites, run on every database and with both Redis clients, together cover every line of `src`.
@@ -481,7 +482,8 @@ CI fails unless the Unit and Integration suites, run on every database and with 
 - **Schemas.** Each run generates tables keyed by integers, text codes or two columns, and unique identifier columns. It adds foreign keys with every referential action the database supports, including self-references and cycles, plus views over tables, keys and other views, and triggers that write other tables.
 - **Releases.** Each deploy adds tables, columns, identifiers, foreign keys, views and triggers, or changes key rules, and backfills new identifiers. A new release may key its models by another column, drop columns, views, triggers or keys it no longer uses, and change its `model-cache` settings.
 - **Pods.** Each pod is a separate PHP process running one release's models and settings. The migration job runs while old pods serve. New pods start next to old ones, old pods restart and stop, and the contract migration sometimes runs before they are gone. Some deploys are rolled back.
-- **Workload.** Reads and writes go through the query builder, Eloquent models and raw SQL. Reads before and after each write come from every pod, mostly of the same rows through each of their keys. Transactions are held open, and Redis is flushed, emptied or evicts keys.
+- **Workload.** Reads and writes go through the query builder, Eloquent models and raw SQL. Reads use subqueries, `EXISTS`, joins, aggregates, unions, eager loads, `withCount` and `whereHas`. Writes include upserts, `insertUsing`, join updates and multi-statement SQL. Reads before and after each write come from every pod, mostly of the same rows through each of their keys.
+- **Conditions.** Transactions are held open, and Redis is flushed, emptied, evicts keys, or goes down for every pod and comes back. Pods use a second connection name to the same database, and every deploy also runs on prefixed tables.
 
 Every read runs through the cache and again without it, and must return the same result. A failing run is shrunk to the fewest steps that still fail and written to `build/fuzz/`:
 
@@ -490,7 +492,7 @@ MODEL_CACHE_FUZZ_PLAN=build/fuzz/rolling-pgsql-42.json just test-pgsql --filter=
 MODEL_CACHE_FUZZ_SEED=42 MODEL_CACHE_FUZZ_TRACE=trace.log just test-pgsql --filter=RollingDeploy   # writes every step and its outcome
 ```
 
-`GeneratedMigrationsTest` checks that every generated schema and migration applies on each database, and that the cache reads its foreign keys, views and triggers.
+`ConcurrentDeployTest`, in the Concurrency suite, runs the same deploys with the pods' reads and writes racing between the deploys' other steps. Every read is checked whenever the pods pause. `GeneratedMigrationsTest` checks that every generated schema and migration applies on each database, and that the cache reads its foreign keys, views and triggers. Plans of bugs found this way are kept in `tests/Fuzz/corpus`, which the Integration suite replays on every database.
 
 ## License
 

@@ -22,6 +22,19 @@ final class WriteTest extends TestCase
         );
     }
 
+    public function testUpsertsFireInsertTriggersAndWhatTheirUpdateFires(): void
+    {
+        $this->assertSame(
+            ['a:cars', 'gi:cars', 'gu:cars', 'gc:cars:name', 'u:cars:name'],
+            Write::upsert(['name', 'cars.NAME'])->dependentsFields('cars'),
+        );
+    }
+
+    public function testReplacesFireInsertTriggersAndWhatTheirDeleteFires(): void
+    {
+        $this->assertSame(['a:cars', 'gi:cars', 'gd:cars', 'd:cars'], Write::replace()->dependentsFields('cars'));
+    }
+
     public function testDeletesFireDeleteTriggersAndRules(): void
     {
         $this->assertSame(['a:cars', 'gd:cars', 'd:cars'], Write::delete()->dependentsFields('cars'));

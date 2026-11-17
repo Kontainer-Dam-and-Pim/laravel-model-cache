@@ -22,6 +22,7 @@ final class PodProcess
     private function __construct(
         public readonly string $name,
         public readonly int $release,
+        public readonly bool $secondConnection,
         private $process,
         private array $pipes,
         private readonly string $errorLog,
@@ -30,7 +31,7 @@ final class PodProcess
     /**
      * @param  array<string, mixed>  $config  configuration the pod's application is booted with
      */
-    public static function start(string $name, Release $release, array $config): self
+    public static function start(string $name, Release $release, bool $secondConnection, array $config): self
     {
         $errorLog = (string) tempnam(sys_get_temp_dir(), "model-cache-pod-{$name}-");
         $process = proc_open([PHP_BINARY, '-d', 'display_errors=stderr', __DIR__.'/pod.php'], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $errorLog, 'w']], $pipes);
@@ -39,7 +40,7 @@ final class PodProcess
             throw new RuntimeException("Could not start pod {$name}");
         }
 
-        $pod = new self($name, $release->number, $process, [$pipes[0], $pipes[1]], $errorLog);
+        $pod = new self($name, $release->number, $secondConnection, $process, [$pipes[0], $pipes[1]], $errorLog);
         $pod->send(['config' => $config, 'release' => $release->toArray()]);
 
         return $pod;
@@ -51,13 +52,32 @@ final class PodProcess
      */
     public function send(array $message): array
     {
+        $this->dispatch($message);
+
+        return $this->receive();
+    }
+
+    /**
+     * Sends a message without waiting for the reply, which `receive()` reads, so several pods
+     * can work at once.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    public function dispatch(array $message): void
+    {
         fwrite($this->pipes[0], json_encode($message, JSON_THROW_ON_ERROR)."\n");
         fflush($this->pipes[0]);
+    }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function receive(): array
+    {
         $read = [$this->pipes[1]];
         $none = [];
         if (stream_select($read, $none, $none, self::REPLY_TIMEOUT_SECONDS) !== 1 || ($line = fgets($this->pipes[1])) === false) {
-            throw new RuntimeException("Pod {$this->name} gave no reply to ".json_encode($message)."\n".$this->errors());
+            throw new RuntimeException("Pod {$this->name} gave no reply\n".$this->errors());
         }
 
         try {
