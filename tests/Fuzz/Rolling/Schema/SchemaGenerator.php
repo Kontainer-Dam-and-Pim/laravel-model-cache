@@ -61,7 +61,7 @@ final readonly class SchemaGenerator
     public function expand(Schema $schema): Schema
     {
         foreach (range(1, $this->dice->int(1, 3)) as $_) {
-            $schema = match ($this->dice->weighted(['table' => 2, 'column' => 3, 'unique' => 2, 'key' => 3, 'rules' => 2, 'view' => 2, 'trigger' => 2, 'softDeletes' => 2])) {
+            $schema = match ($this->dice->weighted(['table' => 2, 'column' => 3, 'unique' => 2, 'key' => 3, 'rules' => 2, 'view' => 2, 'trigger' => 2, 'softDeletes' => 2, ...($this->driver === Driver::PgSql ? ['inheritance' => 2] : [])])) {
                 'table' => $this->withForeignKey($schema->withTable($table = $this->table($this->nextName('t', array_keys($schema->tables)))), $table->name, false),
                 'column' => $this->withColumn($schema),
                 'unique' => $this->withUniqueColumn($schema),
@@ -70,6 +70,7 @@ final readonly class SchemaGenerator
                 'view' => $this->withView($schema),
                 'trigger' => $this->withTrigger($schema),
                 'softDeletes' => $this->withSoftDeletes($schema),
+                'inheritance' => $this->withInheritingTable($schema),
             };
         }
 
@@ -195,6 +196,17 @@ final readonly class SchemaGenerator
     }
 
     /**
+     * Adds a PostgreSQL table inheriting a data table's columns, whose rows reads of that table
+     * include and writes to it reach.
+     */
+    private function withInheritingTable(Schema $schema): Schema
+    {
+        $parent = $this->dice->pick($this->dataTables($schema));
+
+        return $schema->withTable(new Table($this->nextName('t', array_keys($schema->tables)), $parent->columns, $parent->primaryKey, $parent->autoIncrement, [], $parent->name));
+    }
+
+    /**
      * Adds the column soft deletes mark rows deleted in, which the next release's model uses.
      */
     private function withSoftDeletes(Schema $schema): Schema
@@ -297,7 +309,7 @@ final readonly class SchemaGenerator
      */
     private function dataTables(Schema $schema): array
     {
-        return array_values(array_filter($schema->tables, static fn (Table $table): bool => $table->name !== self::AUDIT));
+        return array_values(array_filter($schema->tables, static fn (Table $table): bool => $table->name !== self::AUDIT && $table->inherits === null));
     }
 
     /**

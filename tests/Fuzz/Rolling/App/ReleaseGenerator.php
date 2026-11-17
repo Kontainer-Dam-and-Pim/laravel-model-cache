@@ -74,7 +74,7 @@ final readonly class ReleaseGenerator
     {
         $columns = [];
         foreach ($schema->tables as $table) {
-            if ($table->name === SchemaGenerator::AUDIT) {
+            if ($table->name === SchemaGenerator::AUDIT || $table->inherits !== null) {
                 continue;
             }
 

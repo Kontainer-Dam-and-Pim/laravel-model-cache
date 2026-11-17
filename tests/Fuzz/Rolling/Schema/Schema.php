@@ -49,9 +49,20 @@ final readonly class Schema
         return array_values(array_filter($this->foreignKeys, static fn (ForeignKey $foreignKey): bool => $foreignKey->child === $child));
     }
 
+    /**
+     * Sets the table, and the columns of the tables inheriting from it to its own.
+     */
     public function withTable(Table $table): self
     {
-        return new self([...$this->tables, $table->name => $table], $this->foreignKeys, $this->views, $this->triggers);
+        $tables = [...$this->tables, $table->name => $table];
+
+        foreach ($tables as $name => $other) {
+            if ($other->inherits === $table->name) {
+                $tables[$name] = new Table($name, $table->columns, $table->primaryKey, $table->autoIncrement, [], $table->name);
+            }
+        }
+
+        return new self($tables, $this->foreignKeys, $this->views, $this->triggers);
     }
 
     public function withForeignKey(ForeignKey $foreignKey): self
@@ -95,16 +106,15 @@ final readonly class Schema
 
     public function withoutTable(string $name): self
     {
-        $tables = $this->tables;
-        unset($tables[$name]);
-        $foreignKeys = array_filter($this->foreignKeys, static fn (ForeignKey $foreignKey): bool => $foreignKey->child !== $name && $foreignKey->parent !== $name);
+        $tables = array_filter($this->tables, static fn (Table $table): bool => $table->name !== $name && $table->inherits !== $name);
+        $foreignKeys = array_filter($this->foreignKeys, static fn (ForeignKey $foreignKey): bool => isset($tables[$foreignKey->child]) && isset($tables[$foreignKey->parent]));
 
         return (new self($tables, $foreignKeys, $this->views, $this->triggers))->withoutBrokenDependents();
     }
 
     public function withoutColumn(string $table, string $column): self
     {
-        $tables = [...$this->tables, $table => $this->table($table)->withoutColumn($column)];
+        $tables = $this->withTable($this->table($table)->withoutColumn($column))->tables;
         $foreignKeys = array_filter(
             $this->foreignKeys,
             static fn (ForeignKey $foreignKey): bool => ! ($foreignKey->child === $table && in_array($column, $foreignKey->childColumns, true))

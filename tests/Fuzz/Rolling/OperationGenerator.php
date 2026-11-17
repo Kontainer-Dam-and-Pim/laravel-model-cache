@@ -24,6 +24,8 @@ use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Schema;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\SchemaGenerator;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Table;
 use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\ValueKind;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\View;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\ViewKind;
 
 /**
  * Generates the reads and writes a release's code makes, against the schema and models it was
@@ -116,6 +118,11 @@ final readonly class OperationGenerator
     public function write(Release $release, bool $inTransaction, ?string $table = null): Write
     {
         $table = $table === null ? $this->table($release, 3) : $release->schema->table($table);
+        $views = $this->writableViews($release, $table);
+
+        if ($views !== [] && $this->dice->chance(15)) {
+            return $this->writeThroughView($release, $this->dice->pick($views));
+        }
         $kinds = [
             WriteKind::Insert->value => 15,
             WriteKind::InsertOrIgnore->value => 5,
@@ -165,6 +172,32 @@ final readonly class OperationGenerator
             WriteKind::UpdateJoined => $this->conditionalWrite($release, $table, $api, $kind, $this->assignments($table))->joinedTo($this->dice->pick($this->parentKeys($release, $table)), $this->dice->pick(self::LABELS)),
             WriteKind::DeleteWhereParentExists => $this->conditionalWrite($release, $table, $api, $kind, [])->joinedTo($this->dice->pick($this->parentKeys($release, $table)), $this->dice->pick(self::LABELS)),
         };
+    }
+
+    /**
+     * The projections of the table, which every database but SQLite lets writes through.
+     *
+     * @return list<View>
+     */
+    private function writableViews(Release $release, Table $table): array
+    {
+        return $this->driver === Driver::Sqlite ? [] : array_values(array_filter(
+            $release->schema->views,
+            static fn (View $view): bool => $view->kind === ViewKind::Projection && $view->source === $table->name,
+        ));
+    }
+
+    /**
+     * An update of labels or a delete through the view, of rows it pins by the table's key.
+     */
+    private function writeThroughView(Release $release, View $view): Write
+    {
+        $table = $release->schema->table($view->source);
+        $conditions = $this->dice->chance(80) ? [$this->condition($table->column($table->primaryKey[0]))] : [];
+
+        return $this->dice->chance(70)
+            ? new Write(Api::Builder, WriteKind::UpdateView, $view->name, $conditions, [['label' => $this->dice->pick(self::LABELS)]])
+            : new Write(Api::Builder, WriteKind::DeleteView, $view->name, $conditions, []);
     }
 
     /**

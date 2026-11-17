@@ -7,8 +7,10 @@ namespace Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema;
 use LogicException;
 
 /**
- * A table: its columns in order, its primary key, whether that key is generated, and the columns
- * with a unique index of their own, which foreign keys and models may use as a key instead.
+ * A table: its columns in order, its primary key, whether that key is generated, the columns
+ * with a unique index of their own, which foreign keys and models may use as a key instead, and
+ * on PostgreSQL the table it inherits its columns from. An inheriting table has no constraints of
+ * its own: its primary key names the columns that would be one.
  */
 final readonly class Table
 {
@@ -23,6 +25,7 @@ final readonly class Table
         public array $primaryKey,
         public bool $autoIncrement,
         public array $unique = [],
+        public ?string $inherits = null,
     ) {}
 
     public function column(string $name): Column
@@ -68,7 +71,7 @@ final readonly class Table
 
     public function withColumn(Column $column, bool $unique = false): self
     {
-        return new self($this->name, [...$this->columns, $column], $this->primaryKey, $this->autoIncrement, $unique ? [...$this->unique, $column->name] : $this->unique);
+        return new self($this->name, [...$this->columns, $column], $this->primaryKey, $this->autoIncrement, $unique ? [...$this->unique, $column->name] : $this->unique, $this->inherits);
     }
 
     public function withoutColumn(string $name): self
@@ -83,6 +86,7 @@ final readonly class Table
             $this->primaryKey,
             $this->autoIncrement,
             array_values(array_diff($this->unique, [$name])),
+            $this->inherits,
         );
     }
 
@@ -97,6 +101,7 @@ final readonly class Table
             'primaryKey' => $this->primaryKey,
             'autoIncrement' => $this->autoIncrement,
             'unique' => $this->unique,
+            'inherits' => $this->inherits,
         ];
     }
 
@@ -111,6 +116,7 @@ final readonly class Table
             $data['primaryKey'],
             $data['autoIncrement'],
             $data['unique'],
+            $data['inherits'],
         );
     }
 }

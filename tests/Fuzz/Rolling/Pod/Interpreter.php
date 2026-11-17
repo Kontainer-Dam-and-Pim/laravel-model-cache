@@ -244,6 +244,13 @@ final readonly class Interpreter
 
     private function runWrite(Write $write): mixed
     {
+        if ($write->kind === WriteKind::UpdateView || $write->kind === WriteKind::DeleteView) {
+            $view = DB::table($write->table);
+            $this->applyConditions($view, $write->conditions, $write->or, null, false);
+
+            return $write->kind === WriteKind::UpdateView ? $view->update($write->values()) : $view->delete();
+        }
+
         $table = $this->release->schema->table($write->table);
 
         if ($write->api === Api::Raw) {
