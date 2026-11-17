@@ -6,6 +6,7 @@ namespace Kontainer\ModelCache\Tests\Concurrency;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis as RedisFacade;
+use Kontainer\ModelCache\Tests\Fuzz\Support\FuzzEnvironment;
 use Kontainer\ModelCache\Tests\Fuzz\Support\Workload;
 use Kontainer\ModelCache\Tests\TestCase;
 use Throwable;
@@ -31,8 +32,8 @@ final class MultiProcessTest extends TestCase
             $this->markTestSkipped('Needs the pcntl extension to run concurrent workers.');
         }
 
-        $seed = Workload::seedFromEnvironment();
-        $steps = Workload::iterationsFromEnvironment(self::DEFAULT_STEPS_PER_WORKER);
+        $seed = FuzzEnvironment::seed();
+        $steps = FuzzEnvironment::iterations(self::DEFAULT_STEPS_PER_WORKER);
         $verifier = new Workload($seed, self::databaseDriver());
         $verifier->seedData();
 

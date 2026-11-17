@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Kontainer\ModelCache\Hasher;
-use Kontainer\ModelCache\Reflector;
-use Kontainer\ModelCache\Tagger;
 use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
 use Kontainer\ModelCache\Tests\TestCase;
 
@@ -24,17 +21,14 @@ final class InvalidationExtendedTest extends TestCase
 
         $mk = function (int $id): array {
             $b = DB::table('cars')->where('id', $id);
-            $r = new Reflector($b);
 
-            return [(new Hasher($r))->getHash(), (new Tagger($r))->getTags()];
+            return $this->cacheKeyAndTags($b);
         };
         [$k30, $t30] = $mk(30);
         [$k31, $t31] = $mk(31);
 
         $broad = DB::table('cars'); // unspecific read
-        $rb = new Reflector($broad);
-        $kb = (new Hasher($rb))->getHash();
-        $tb = (new Tagger($rb))->getTags();
+        [$kb, $tb] = $this->cacheKeyAndTags($broad);
         $this->seedCache($k30, $t30, [['id' => 30, 'name' => 'A']]);
         $this->seedCache($k31, $t31, [['id' => 31, 'name' => 'B']]);
         $this->seedCache($kb, $tb, [['id' => 30], ['id' => 31]]);
@@ -60,9 +54,8 @@ final class InvalidationExtendedTest extends TestCase
 
         $mk = function (int $id): array {
             $b = DB::table('cars')->where('id', $id);
-            $r = new Reflector($b);
 
-            return [(new Hasher($r))->getHash(), (new Tagger($r))->getTags()];
+            return $this->cacheKeyAndTags($b);
         };
         [$k40, $t40] = $mk(40);
         [$k41, $t41] = $mk(41);
@@ -87,14 +80,10 @@ final class InvalidationExtendedTest extends TestCase
         ]);
 
         $broad = DB::table('cars');
-        $rb = new Reflector($broad);
-        $kb = (new Hasher($rb))->getHash();
-        $tb = (new Tagger($rb))->getTags();
+        [$kb, $tb] = $this->cacheKeyAndTags($broad);
 
         $spec = DB::table('cars')->where('id', 50);
-        $rs = new Reflector($spec);
-        $ks = (new Hasher($rs))->getHash();
-        $ts = (new Tagger($rs))->getTags();
+        [$ks, $ts] = $this->cacheKeyAndTags($spec);
         $this->seedCache($kb, $tb, [['id' => 50], ['id' => 51]]);
         $this->seedCache($ks, $ts, [['id' => 50, 'name' => 'A']]);
 

@@ -194,6 +194,15 @@ final readonly class Write
         return 'k:'.TableName::tagged($table);
     }
 
+    /**
+     * The table's single-column primary key as `<column>\t<ColumnType>`, by which every host tags
+     * its rows; absent when the key spans several columns or has a type rows cannot be keyed by.
+     */
+    public static function primaryKeyField(string $table): string
+    {
+        return 'p:'.TableName::tagged($table);
+    }
+
     public static function truncateField(string $table): string
     {
         return 't:'.TableName::tagged($table);

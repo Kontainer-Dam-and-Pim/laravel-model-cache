@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace Kontainer\ModelCache\Tests\Integration\QueryBuilder;
 
 use Illuminate\Support\Facades\DB;
-use Kontainer\ModelCache\Reflector;
-use Kontainer\ModelCache\Tagger;
+use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
 use Kontainer\ModelCache\Tests\TestCase;
 
 class UnionSubqueryTest extends TestCase
 {
+    use CacheAssertions;
+
     public function testUnionIncludesTagsFromBothBranches(): void
     {
         // Seed minimal rows so builders are valid
@@ -21,9 +22,8 @@ class UnionSubqueryTest extends TestCase
         $b2 = DB::table('drivers')->select('id');
         $union = $b1->union($b2);
 
-        $reflector = new Reflector($union);
-        $dbName = $reflector->getDatabase();
-        $tags = (new Tagger($reflector))->getTags();
+        $dbName = DB::connection()->getDatabaseName();
+        $tags = $this->resolvedReadTags($union);
 
         $this->assertContains("tags:database:{$dbName}:table_unspecific:cars", $tags);
         $this->assertContains("tags:database:{$dbName}:table_unspecific:drivers", $tags);
@@ -38,9 +38,8 @@ class UnionSubqueryTest extends TestCase
         $b2 = DB::table('drivers')->select('id');
         $unionAll = $b1->unionAll($b2);
 
-        $reflector = new Reflector($unionAll);
-        $dbName = $reflector->getDatabase();
-        $tags = (new Tagger($reflector))->getTags();
+        $dbName = DB::connection()->getDatabaseName();
+        $tags = $this->resolvedReadTags($unionAll);
 
         $this->assertContains("tags:database:{$dbName}:table_unspecific:cars", $tags);
         $this->assertContains("tags:database:{$dbName}:table_unspecific:drivers", $tags);

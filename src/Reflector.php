@@ -18,11 +18,11 @@ use Kontainer\ModelCache\Support\Transactions;
  *
  * Purpose:
  *
- * - Determine affected tables and primary key rows for cache tagging / invalidation.
+ * - Determine affected tables and the values their columns are pinned to for cache tagging / invalidation.
  * - Compile the SQL and parameters for cache key construction and debugging.
  *
  * Architectural notes:
- * - Compiled SQL, tables and rows are memoized, since several collaborators read them per query.
+ * - Compiled SQL, tables and pins are memoized, since several collaborators read them per query.
  * - Method signatures and grammar calls are aligned with Laravel 12's query grammars.
  */
 final class Reflector
@@ -49,9 +49,6 @@ final class Reflector
 
     /** @var list<string>|null */
     private ?array $tables = null;
-
-    /** @var array<string, array<int, scalar>>|null */
-    private ?array $rows = null;
 
     /** @var array<string, int>|null */
     private ?array $referenceCounts = null;
@@ -104,13 +101,6 @@ final class Reflector
         return $this->queryBuilder->getModel() !== null;
     }
 
-    public function usesStringKeys(string $table): bool
-    {
-        $model = $this->queryBuilder->getModel();
-
-        return $model !== null && $model->getTable() === $table && $model->getKeyType() !== 'int';
-    }
-
     /**
      * Tables the query reads or writes. Reads also include tables named only inside raw SQL,
      * so a write to them still invalidates the read.
@@ -136,16 +126,8 @@ final class Reflector
     }
 
     /**
-     * @return array<string, array<int, scalar>>
-     */
-    public function getRows(): array
-    {
-        return $this->rows ??= RowExtractor::extractRows($this->queryBuilder, $this->referenceCounts());
-    }
-
-    /**
      * How often the statement reads each table, scanned once for both the tables to tag and the
-     * tables whose rows can be pinned.
+     * tables whose columns can be pinned.
      *
      * @return array<string, int>
      */

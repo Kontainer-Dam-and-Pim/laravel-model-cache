@@ -44,6 +44,14 @@ final readonly class ColumnKeys
     }
 
     /**
+     * How many keys there are across the types, which bounds what invalidating them costs.
+     */
+    public function size(): int
+    {
+        return array_sum(array_map('count', $this->byType));
+    }
+
+    /**
      * The keys of both sets of values. A type either cannot be keyed for, or that would hold too
      * many keys, is left out.
      */

@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace Kontainer\ModelCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Kontainer\ModelCache\Reflector;
 use Kontainer\ModelCache\Support\RowKeys;
-use Kontainer\ModelCache\Tagger;
 use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
 use Kontainer\ModelCache\Tests\Database\Models\License;
 use Kontainer\ModelCache\Tests\TestCase;
@@ -43,14 +41,12 @@ final class RowKeyEquivalenceTest extends TestCase
 
     public function testStringKeysIgnoreCaseLikeCaseInsensitiveCollations(): void
     {
-        License::query()->create(['code' => 'ABC', 'holder' => 'before']);
-        $this->assertSame('before', License::query()->find('ABC')?->holder);
-        $readTags = (new Tagger(new Reflector(License::query()->whereKey('ABC')->getQuery())))->getTags();
+        $this->loadDependencyMap();
 
-        License::query()->whereKey('abc')->update(['holder' => 'after']);
-        $writeTags = (new Tagger(new Reflector(License::query()->whereKey('abc')->getQuery(), Reflector::QUERY_TYPE_UPDATE, ['holder' => 'after'])))->getTags();
-
-        $this->assertNotSame([], array_intersect($readTags, $writeTags));
+        $this->assertSame(
+            $this->resolvedReadTags(License::query()->whereKey('ABC')->getQuery()),
+            $this->resolvedReadTags(License::query()->whereKey('abc')->getQuery()),
+        );
     }
 
     public function testKeysTheDatabaseMayCastFallBackToTableTags(): void
@@ -65,7 +61,8 @@ final class RowKeyEquivalenceTest extends TestCase
 
     public function testManyKeysAreTaggedAtTableLevel(): void
     {
-        $tags = (new Tagger(new Reflector(DB::table('cars')->whereIn('id', range(1, RowKeys::MAX_PER_TABLE + 1)))))->getTags();
+        $this->loadDependencyMap();
+        $tags = $this->resolvedReadTags(DB::table('cars')->whereIn('id', range(1, RowKeys::MAX_PER_TABLE + 1)));
 
         $this->assertSame(['tags:database:'.DB::connection()->getDatabaseName().':table_unspecific:cars'], $tags);
     }

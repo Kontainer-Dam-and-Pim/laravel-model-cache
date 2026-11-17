@@ -59,11 +59,12 @@ test-matrix *args: deps services
         done
     done
 
-# Run the differential fuzz suite on every database. Tune it with MODEL_CACHE_FUZZ_ITERATIONS.
+# Run the fuzz suite on every database. Tune it with MODEL_CACHE_FUZZ_ITERATIONS and MODEL_CACHE_FUZZ_RUNS,
+# reproduce a run with MODEL_CACHE_FUZZ_SEED, replay a failing deploy with MODEL_CACHE_FUZZ_PLAN.
 fuzz *args: deps services
     #!/usr/bin/env bash
     set -euo pipefail
-    for driver in sqlite mysql pgsql; do
+    for driver in sqlite mysql mariadb pgsql; do
         echo "== fuzz $driver"
         just _suite "$driver" Fuzz {{args}}
     done

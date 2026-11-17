@@ -1,0 +1,218 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Kontainer\ModelCache\Tests\Fuzz\Rolling;
+
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Redis as RedisFacade;
+use Kontainer\ModelCache\Services;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Disturbance;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\DisturbStep;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Lifecycle;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\LifecycleStep;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\MigrateStep;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\PodStep;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Read;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Step;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\TransactionAction;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Operation\Write;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Pod\PodProcess;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\Schema;
+use Kontainer\ModelCache\Tests\Fuzz\Rolling\Schema\SchemaWriter;
+
+/**
+ * Runs a plan from an empty database and an empty Redis: the PHPUnit process is the migration job
+ * and the operator, the pods are processes of their releases. Steps the deploy no longer allows,
+ * as when shrinking removed the step opening a transaction, are skipped. A read whose cached
+ * outcome differs from the database's fails the run.
+ */
+final class Coordinator
+{
+    private const int HISTORY_LENGTH = 80;
+
+    /** @var array<string, PodProcess> */
+    private array $pods = [];
+
+    /** @var list<string> */
+    private array $history = [];
+
+    private RunStatistics $statistics;
+
+    /** @var resource|null */
+    private $trace = null;
+
+    /**
+     * @param  array<string, mixed>  $config  the configuration every pod boots with, before its release's cache settings
+     * @param  string|null  $traceFile  where to write every step and its outcome, for following a run
+     */
+    public function __construct(
+        private readonly Plan $plan,
+        private readonly array $config,
+        private readonly ?string $traceFile = null,
+    ) {}
+
+    /**
+     * @throws StaleRead
+     */
+    public function run(): RunStatistics
+    {
+        $this->statistics = new RunStatistics;
+        $this->trace = $this->traceFile === null ? null : (fopen($this->traceFile, 'w') ?: throw new \RuntimeException("Cannot write the trace to {$this->traceFile}"));
+        $writer = new SchemaWriter(DB::connection());
+        $writer->dropEverything();
+        RedisFacade::connection((string) config('model-cache.redis_connection'))->flushdb();
+        $writer->migrate(new Schema([]), $this->plan->schemas[0]);
+        $state = new DeployState;
+
+        try {
+            foreach ($this->plan->steps as $index => $step) {
+                if (! $state->allows($step)) {
+                    $this->log($index, $step, 'skipped, the deploy no longer allows it');
+                    $this->statistics->skippedSteps++;
+
+                    continue;
+                }
+
+                $this->execute($index, $step, $state, $writer);
+                $state = $state->after($step);
+            }
+        } catch (\Throwable $exception) {
+            foreach ($this->pods as $pod) {
+                $pod->kill();
+            }
+            $this->pods = [];
+            $this->closeTrace();
+
+            throw $exception;
+        }
+
+        $this->closeTrace();
+
+        foreach ($this->pods as $pod) {
+            $pod->stop();
+        }
+        $this->pods = [];
+
+        return $this->statistics;
+    }
+
+    private function execute(int $index, Step $step, DeployState $state, SchemaWriter $writer): void
+    {
+        match (true) {
+            $step instanceof PodStep => $this->podStep($index, $step),
+            $step instanceof LifecycleStep => $this->lifecycle($index, $step),
+            $step instanceof MigrateStep => $this->migrate($index, $step, $state, $writer),
+            $step instanceof DisturbStep => $this->disturb($index, $step),
+        };
+    }
+
+    private function podStep(int $index, PodStep $step): void
+    {
+        $pod = $this->pods[$step->pod];
+        $outcome = $pod->send(match (true) {
+            $step->action instanceof Read => ['read' => $step->action->toArray()],
+            $step->action instanceof Write => ['write' => $step->action->toArray()],
+            $step->action instanceof TransactionAction => ['transaction' => $step->action->value],
+        });
+
+        if (! $step->action instanceof Read) {
+            $this->log($index, $step, isset($outcome['error']) ? "rejected: {$outcome['message']}" : 'ok');
+
+            if ($step->action instanceof Write) {
+                $this->statistics->writes++;
+                if (isset($outcome['error'])) {
+                    $this->statistics->rejectedWrites++;
+                    $this->statistics->rejections[$outcome['error']] = ($this->statistics->rejections[$outcome['error']] ?? 0) + 1;
+                }
+            }
+
+            return;
+        }
+
+        $this->statistics->reads++;
+        $this->statistics->rejectedReads += isset($outcome['database']['error']) ? 1 : 0;
+        $this->statistics->releasesRead[$pod->release] = true;
+        $this->log($index, $step, json_encode($outcome['database']) ?: '');
+
+        if ($outcome['cached'] != $outcome['database']) {
+            throw new StaleRead(sprintf(
+                "Pod %s of release %d read a cached result that differs from the database at step %d: %s\nCached: %s\nDatabase: %s\nSeed: %d\nLast steps:\n  %s",
+                $step->pod,
+                $pod->release,
+                $index,
+                $step->describe(),
+                json_encode($outcome['cached']),
+                json_encode($outcome['database']),
+                $this->plan->seed,
+                implode("\n  ", $this->history),
+            ), $step->action->describe());
+        }
+    }
+
+    private function lifecycle(int $index, LifecycleStep $step): void
+    {
+        $this->log($index, $step, 'ok');
+        $release = $this->plan->release($step->lifecycle === Lifecycle::Start ? $step->release : $this->pods[$step->pod]->release);
+
+        if ($step->lifecycle !== Lifecycle::Start) {
+            $this->pods[$step->pod]->stop();
+            unset($this->pods[$step->pod]);
+        }
+
+        if ($step->lifecycle !== Lifecycle::Stop) {
+            $this->pods[$step->pod] = PodProcess::start($step->pod, $release, [...$this->config, 'model-cache' => [...$this->config['model-cache'], ...$release->config]]);
+        }
+    }
+
+    private function migrate(int $index, MigrateStep $step, DeployState $state, SchemaWriter $writer): void
+    {
+        $writer->migrate($this->plan->schemas[$state->schema], $this->plan->schemas[$step->schema]);
+        $this->log($index, $step, 'ok');
+        $this->statistics->migrations++;
+    }
+
+    private function disturb(int $index, DisturbStep $step): void
+    {
+        $connection = RedisFacade::connection((string) config('model-cache.redis_connection'));
+
+        if ($step->disturbance === Disturbance::Flush) {
+            Services::cache()->flush();
+        } elseif ($step->disturbance === Disturbance::Empty) {
+            $connection->flushdb();
+        } else {
+            $keys = $connection->keys(Services::redis()->prefix('*'));
+            sort($keys, SORT_STRING);
+            $dice = new Dice($step->seed);
+
+            foreach ($keys as $key) {
+                if ($dice->chance(33)) {
+                    $connection->del((string) $key);
+                }
+            }
+        }
+
+        $this->log($index, $step, 'ok');
+    }
+
+    private function closeTrace(): void
+    {
+        if ($this->trace !== null) {
+            fclose($this->trace);
+            $this->trace = null;
+        }
+    }
+
+    private function log(int $index, Step $step, string $outcome): void
+    {
+        $this->history[] = sprintf('#%d %s => %s', $index, $step->describe(), mb_strimwidth($outcome, 0, 300, '…'));
+
+        if ($this->trace !== null) {
+            fwrite($this->trace, sprintf("#%d %s => %s\n", $index, $step->describe(), $outcome));
+        }
+
+        if (count($this->history) > self::HISTORY_LENGTH) {
+            array_shift($this->history);
+        }
+    }
+}

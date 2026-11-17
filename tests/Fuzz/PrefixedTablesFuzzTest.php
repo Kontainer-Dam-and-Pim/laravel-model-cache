@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kontainer\ModelCache\Tests\Fuzz;
 
+use Kontainer\ModelCache\Tests\Fuzz\Support\FuzzEnvironment;
 use Kontainer\ModelCache\Tests\Fuzz\Support\Workload;
 use Kontainer\ModelCache\Tests\TestCase;
 
@@ -22,8 +23,8 @@ final class PrefixedTablesFuzzTest extends TestCase
 
     public function testCachedReadsMatchTheDatabaseWithPrefixedTables(): void
     {
-        $workload = new Workload(Workload::seedFromEnvironment(), self::databaseDriver());
-        $workload->run(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS));
+        $workload = new Workload(FuzzEnvironment::seed(), self::databaseDriver());
+        $workload->run(FuzzEnvironment::iterations(self::DEFAULT_ITERATIONS));
 
         $this->assertGreaterThan(0, $workload->comparisons());
     }

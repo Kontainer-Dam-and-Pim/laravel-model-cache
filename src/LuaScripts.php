@@ -130,12 +130,14 @@ final class LuaScripts
     /**
      * Defines the names `DependentTables` and `Write` give the parts of a dependency map the
      * scripts read: the table standing for every table, and the field every stored map has,
-     * which lists that table when the schema could not be read. Also defines
+     * which lists that table when the schema could not be read; and what follows a table's
+     * `table_specific` tag in the tags of its rows (see `Tagger`). Also defines
      * readColumnKeys(index), which reads `ColumnKeys::arguments()` starting at the index and
      * returns, per `ColumnType` the values are keyed for, the first and last index of its keys,
      * and the index after them.
      */
     private const string DEPENDENTS_NAMES = "local everyTable = '".DependentTables::EVERY_TABLE."'\nlocal anyTableField = '".Write::ANY_TABLE_FIELD."'\n"
+        ."local rowInfix = '".Tagger::ROW_INFIX."'\n"
         ."local columnTypes = {'".ColumnType::Integer->value."', '".ColumnType::Decimal->value."', '".ColumnType::Text->value."', '".ColumnType::Uuid->value."'}\n"
         .'local keysAsBefore = '.ColumnKeys::AS_BEFORE."\n".<<<'LUA'
         local function readColumnKeys(index)
@@ -178,9 +180,16 @@ final class LuaScripts
 
     /**
      * ARGV: base, entry hash, fresh token, ttl seconds, 1 to check the server else 0, tag count, tags...,
-     *       cascade read count, then per table read: dependents name, cascade tag prefix, cascade
-     *       columns field, pinned column count, then per column: column, `ColumnKeys::arguments()`
-     * Returns {generation, fingerprint} on a miss and {generation, fingerprint, payload} on a hit.
+     *       table read count, then per table read: dependents name, `table_specific` tag, `table_unspecific`
+     *       tag, primary key field, cascade tag prefix, cascade columns field, pinned column count,
+     *       then per column: column, `ColumnKeys::arguments()`
+     * Returns {generation, fingerprint, 0, tags...} on a miss, with the given tags and those it tagged
+     * the tables with, and {generation, fingerprint, 1, payload} on a hit.
+     *
+     * A table read pinning the table's primary key, as the dependency map lists it
+     * (`Write::primaryKeyField()`), to values keyed for the key's type takes `table_specific` and
+     * the tags of those rows; any other, and every read while no readable map is known, takes
+     * `table_unspecific`.
      *
      * Asked to check the server, it first retires the generation of another server run (see
      * `SERVER_CHECK`). Reading the run id costs more than the rest of a hit, so `Cache` asks for
@@ -217,28 +226,48 @@ final class LuaScripts
             end
         end
         local versionKeys = {}
+        local resolved = {}
         local function takeToken(tag)
             versionKeys[#versionKeys + 1] = scope .. 'v:' .. tag
         end
+        local function takeTableToken(tag)
+            takeToken(tag)
+            resolved[#resolved + 1] = tag
+        end
         for i = 7, lastVersionTag do
-            takeToken(ARGV[i])
+            takeTableToken(ARGV[i])
         end
         local index = lastVersionTag + 1
-        local cascadeReads = tonumber(ARGV[index])
+        local tableReads = tonumber(ARGV[index])
         index = index + 1
-        for _ = 1, cascadeReads do
+        for _ = 1, tableReads do
             local dependentsKey = scope .. 'd:' .. ARGV[index]
-            local prefix = ARGV[index + 1]
-            local columnsField = ARGV[index + 2]
-            local pinCount = tonumber(ARGV[index + 3])
-            index = index + 4
+            local specificTag, unspecificTag, keyField = ARGV[index + 1], ARGV[index + 2], ARGV[index + 3]
+            local prefix = ARGV[index + 4]
+            local columnsField = ARGV[index + 5]
+            local pinCount = tonumber(ARGV[index + 6])
+            index = index + 7
             local pins = {}
             for _ = 1, pinCount do
                 local column = ARGV[index]
                 pins[column], index = readColumnKeys(index + 1)
             end
-            local map = redis.call('HMGET', dependentsKey, anyTableField, columnsField)
-            if not map[1] or map[1] == everyTable then
+            local map = redis.call('HMGET', dependentsKey, anyTableField, columnsField, keyField)
+            local known = map[1] and map[1] ~= everyTable
+            local rowKeys
+            if known and map[3] then
+                local column, columnType = string.match(map[3], '^(.-)\t(.+)$')
+                rowKeys = pins[column] and pins[column][columnType]
+            end
+            if rowKeys then
+                takeTableToken(specificTag)
+                for k = rowKeys[1], rowKeys[2] do
+                    takeTableToken(specificTag .. rowInfix .. ARGV[k])
+                end
+            else
+                takeTableToken(unspecificTag)
+            end
+            if not known then
                 takeToken(cascadeAny(prefix))
             else
                 local columns = map[2]
@@ -274,10 +303,14 @@ final class LuaScripts
         local entry = redis.call('GET', scope .. 'e:' .. ARGV[2])
         if entry and string.sub(entry, 1, 40) == fingerprint then
             count(metricHit, statsLabel, 1)
-            return {generation, fingerprint, string.sub(entry, 41)}
+            return {generation, fingerprint, 1, string.sub(entry, 41)}
         end
         count(metricMiss, statsLabel, 1)
-        return {generation, fingerprint}
+        local reply = {generation, fingerprint, 0}
+        for _, tag in ipairs(resolved) do
+            reply[#reply + 1] = tag
+        end
+        return reply
         LUA;
 
     /**
@@ -315,7 +348,13 @@ final class LuaScripts
     /**
      * ARGV: base, fresh token, ttl seconds, replica lag seconds, tag count, tags...,
      *       group count, then per group: dependents name, prefix count, prefixes..., field count, dependents fields (see `Write`)...,
-     *       cascade tag prefix, keyed field count, then per keyed field: field, fallback field, `ColumnKeys::arguments()`
+     *       cascade tag prefix, keyed field count, then per keyed field: field, fallback field, `ColumnKeys::arguments()`,
+     *       row write count, then per row write: `table_specific` tag, primary key field, column count,
+     *       then per column: column, `ColumnKeys::arguments()`
+     * A row write replaces the tags of the rows its keys name for the table's primary key, as the
+     * dependency map lists it (`Write::primaryKeyField()`), when it lists keys of the key's type
+     * for that column; otherwise, and while the map is not known, it replaces `table_specific`,
+     * invalidating every read pinned to rows of the table.
      * A keyed field lists, besides tables changed table-wide, row-precise foreign key edges as
      * `<child>\t<column>\t<ColumnType>`: for those only the cascade tags of the child naming the
      * keys are replaced (see `CASCADE_TAGS`), or the child table-wide when the values cannot be
@@ -426,6 +465,31 @@ final class LuaScripts
                             end
                         end
                     end
+                end
+            end
+            local rowWriteCount = tonumber(ARGV[index])
+            index = index + 1
+            for _ = 1, rowWriteCount do
+                local specificTag, keyField = ARGV[index], ARGV[index + 1]
+                local columnCount = tonumber(ARGV[index + 2])
+                index = index + 3
+                local columns = {}
+                for _ = 1, columnCount do
+                    local column = ARGV[index]
+                    columns[column], index = readColumnKeys(index + 1)
+                end
+                local rowKeys
+                local key = known and redis.call('HGET', dependentsKey, keyField)
+                if key then
+                    local column, columnType = string.match(key, '^(.-)\t(.+)$')
+                    rowKeys = columns[column] and columns[column][columnType]
+                end
+                if rowKeys then
+                    for k = rowKeys[1], rowKeys[2] do
+                        replace(specificTag .. rowInfix .. ARGV[k])
+                    end
+                else
+                    replace(specificTag)
                 end
             end
             if changed[everyTable] then

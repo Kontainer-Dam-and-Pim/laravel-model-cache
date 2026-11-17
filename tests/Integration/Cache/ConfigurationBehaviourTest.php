@@ -15,11 +15,13 @@ use Kontainer\ModelCache\ExpirationPolicy;
 use Kontainer\ModelCache\Manager;
 use Kontainer\ModelCache\Redis as CacheRedis;
 use Kontainer\ModelCache\Reflector;
-use Kontainer\ModelCache\Tagger;
+use Kontainer\ModelCache\Tests\Concerns\CacheAssertions;
 use Kontainer\ModelCache\Tests\TestCase;
 
 class ConfigurationBehaviourTest extends TestCase
 {
+    use CacheAssertions;
+
     public function testActiveFalseDisablesCaching(): void
     {
         config(['model-cache.active' => false]);
@@ -44,23 +46,18 @@ class ConfigurationBehaviourTest extends TestCase
 
     public function testConsiderRowsTogglesRowSpecificTags(): void
     {
-        // Seed data
-        DB::table('cars')->insert(['id' => 777, 'name' => 'R', 'engine_id' => null, 'driver_id' => null]);
+        $this->loadDependencyMap();
         $builder = DB::table('cars')->where('id', 777);
-        $reflector = new Reflector($builder);
-        $dbName = $reflector->getDatabase();
+        $dbName = DB::connection()->getDatabaseName();
 
-        // With rows considered
         config(['model-cache.consider_rows' => true]);
-        $tagsWithRows = (new Tagger($reflector))->getTags();
-        $this->assertContains("tags:database:{$dbName}:table_specific:cars", $tagsWithRows);
-        $this->assertNotContains("tags:database:{$dbName}:table_unspecific:cars", $tagsWithRows);
-        $this->assertContains("tags:database:{$dbName}:table_specific:cars:row:777", $tagsWithRows);
+        $this->assertSame(
+            ["tags:database:{$dbName}:table_specific:cars", "tags:database:{$dbName}:table_specific:cars:row:777"],
+            $this->resolvedReadTags($builder),
+        );
 
-        // Without rows considered
         config(['model-cache.consider_rows' => false]);
-        $tagsWithoutRows = (new Tagger($reflector))->getTags();
-        $this->assertSame(["tags:database:{$dbName}:table_unspecific:cars"], $tagsWithoutRows);
+        $this->assertSame(["tags:database:{$dbName}:table_unspecific:cars"], $this->resolvedReadTags($builder));
     }
 
     public function testPrefixAppliedToKeys(): void

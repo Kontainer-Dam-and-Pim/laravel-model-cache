@@ -14,6 +14,7 @@ use Kontainer\ModelCache\Encoder;
 use Kontainer\ModelCache\ExpirationPolicy;
 use Kontainer\ModelCache\QueryHandler;
 use Kontainer\ModelCache\Redis;
+use Kontainer\ModelCache\Support\AssignedColumns;
 use Kontainer\ModelCache\Support\FailedInvalidations;
 use Kontainer\ModelCache\Support\Invalidation;
 use Kontainer\ModelCache\Support\RedisAvailability;
@@ -121,7 +122,7 @@ final class SoundnessTest extends TestCase
         $this->assertSame('before', $read()[0]->name);
 
         DB::connection()->getPdo()->exec("update cars set name = 'after' where id = 1");
-        $unreachable->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'after']);
+        $unreachable->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'after'], AssignedColumns::updated('cars', ['name' => 'after']));
 
         $this->assertTrue($failed->hasPending());
         $this->assertSame('after', $read()[0]->name);
@@ -222,7 +223,7 @@ final class SoundnessTest extends TestCase
             }
         });
 
-        $handler->invalidateQuery(DB::table('owners')->where('id', 1), 'delete', Write::delete());
+        $handler->invalidateQuery(DB::table('owners')->where('id', 1), 'delete', Write::delete(), [], AssignedColumns::none());
 
         $this->assertNotSame($generation, $this->generationId());
         $this->assertFalse($failed->hasPending());
@@ -241,10 +242,10 @@ final class SoundnessTest extends TestCase
             }
         });
         Log::spy();
-        $handler->invalidateQuery(DB::table('owners')->where('id', 1), 'delete', Write::delete());
+        $handler->invalidateQuery(DB::table('owners')->where('id', 1), 'delete', Write::delete(), [], AssignedColumns::none());
         $generation = $this->generationId();
 
-        $handler->invalidateQuery(DB::table('owners')->where('id', 2), 'delete', Write::delete());
+        $handler->invalidateQuery(DB::table('owners')->where('id', 2), 'delete', Write::delete(), [], AssignedColumns::none());
 
         $this->assertSame(1, $catalogReads);
         $this->assertNotSame($generation, $this->generationId());
@@ -295,7 +296,7 @@ final class SoundnessTest extends TestCase
         $this->assertSame('before', $read($otherHost));
 
         DB::connection()->getPdo()->exec("update cars set name = 'after' where id = 1");
-        $unreachable->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'after']);
+        $unreachable->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'after'], AssignedColumns::updated('cars', ['name' => 'after']));
         $this->assertTrue($availability->isCoolingDown());
         $sameProcess->replayFailedInvalidations(RedisCooldown::Ignore);
 

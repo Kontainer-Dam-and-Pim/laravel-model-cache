@@ -90,20 +90,6 @@ final class Workload
         }
     }
 
-    public static function seedFromEnvironment(): int
-    {
-        $seed = getenv('MODEL_CACHE_FUZZ_SEED');
-
-        return $seed === false || $seed === '' ? random_int(1, PHP_INT_MAX) : (int) $seed;
-    }
-
-    public static function iterationsFromEnvironment(int $default): int
-    {
-        $iterations = getenv('MODEL_CACHE_FUZZ_ITERATIONS');
-
-        return $iterations === false || $iterations === '' ? $default : max(1, (int) $iterations);
-    }
-
     public function seedData(): void
     {
         foreach (range(1, 4) as $id) {

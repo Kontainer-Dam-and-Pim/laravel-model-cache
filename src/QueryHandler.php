@@ -10,10 +10,9 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
 use Kontainer\ModelCache\Database\QueryBuilder;
 use Kontainer\ModelCache\Debug\CacheCollector;
-use Kontainer\ModelCache\Support\AssignedRows;
+use Kontainer\ModelCache\Support\AssignedColumns;
 use Kontainer\ModelCache\Support\BypassReason;
 use Kontainer\ModelCache\Support\CacheOperation;
-use Kontainer\ModelCache\Support\CascadeRead;
 use Kontainer\ModelCache\Support\ColumnKeys;
 use Kontainer\ModelCache\Support\DependentTables;
 use Kontainer\ModelCache\Support\FailedInvalidations;
@@ -27,6 +26,7 @@ use Kontainer\ModelCache\Support\ReplicaReads;
 use Kontainer\ModelCache\Support\RetireReason;
 use Kontainer\ModelCache\Support\StatementShape;
 use Kontainer\ModelCache\Support\TableName;
+use Kontainer\ModelCache\Support\TableRead;
 use Kontainer\ModelCache\Support\Transactions;
 use Kontainer\ModelCache\Support\Write;
 use LogicException;
@@ -72,8 +72,9 @@ final class QueryHandler
      * @param  string  $statementType  One of Reflector::QUERY_TYPE_*
      * @param  Write  $write  What the statement did to the rows, deciding what the database changed along with them
      * @param  array<int|string, mixed>  $values  Values used by the grammar to compile the SQL (e.g., update sets)
+     * @param  AssignedColumns  $assigned  What the statement assigned the columns of its table, naming the rows it changed
      */
-    public function invalidateQuery(QueryBuilder $builder, string $statementType, Write $write, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
+    public function invalidateQuery(QueryBuilder $builder, string $statementType, Write $write, array $values, AssignedColumns $assigned): void
     {
         $collector = $this->startCollector();
         $connection = $builder->getConnection();
@@ -85,9 +86,9 @@ final class QueryHandler
                 return;
             }
 
-            $tagger = new Tagger($reflector, $assignedRows);
-            $tags = $tagger->getTags();
-            $invalidation = Invalidation::ofWrite($tags, $tagger->tableWideTags(), ReplicaReads::lagSeconds($connection))->withChangesOf(
+            $tagger = new Tagger($reflector, $assigned);
+            $tags = $tagger->writeTags();
+            $invalidation = Invalidation::ofWrite($tags, $tagger->tableWideTags(), ReplicaReads::lagSeconds($connection), $tagger->rowWrites())->withChangesOf(
                 $reflector->getDatabase(),
                 $connection->getName() ?? throw new LogicException('Model Cache invalidates writes on named connections only'),
                 self::narrowedToDeletedKeys($write, $builder, $reflector),
@@ -126,7 +127,7 @@ final class QueryHandler
     {
         foreach ($tables as $table) {
             $builder = (new QueryBuilder($connection, $this, $connection->getQueryGrammar(), $connection->getPostProcessor()))->from($table);
-            $this->invalidateQuery($builder, Reflector::QUERY_TYPE_TRUNCATE, $write);
+            $this->invalidateQuery($builder, Reflector::QUERY_TYPE_TRUNCATE, $write, [], AssignedColumns::unknown());
         }
     }
 
@@ -161,10 +162,8 @@ final class QueryHandler
             $sql = $reflector->getSql();
             $bypass = (new Manager($reflector))->bypassReason();
             $cacheable = $bypass === null;
-            $tagger = new Tagger($reflector);
             $key = $cacheable ? (new Hasher($reflector))->getHash() : '';
-            $tags = $cacheable ? $tagger->getTags() : [];
-            $cascadeReads = $cacheable ? $tagger->cascadeReads() : [];
+            $reads = $cacheable ? (new Tagger($reflector))->reads() : [];
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Analyze, $exception);
             $sql = $builder->toSql();
@@ -182,14 +181,14 @@ final class QueryHandler
         }
 
         $table = $this->metrics->isEnabled() ? TableName::tagged(TableName::unqualified($reflector->getTables()[0] ?? '')) : '';
-        $lookup = $this->lookup($key, $tags, $cascadeReads, $table);
+        $lookup = $this->lookup($key, $reads, $table);
 
         if ($lookup === null) {
             $this->metrics->count(Metric::Bypass, BypassReason::Unavailable->value);
         }
 
         if ($lookup instanceof CacheHit) {
-            $collector?->endMeasuring('Hit', [$key], $tags, $sql, $reflector->getParameters());
+            $collector?->endMeasuring('Hit', [$key], [], $sql, $reflector->getParameters());
 
             return $lookup->rows;
         }
@@ -198,10 +197,10 @@ final class QueryHandler
 
         if ($lookup instanceof CacheMiss) {
             $readFromReplica = ReplicaReads::readsFromReplica($builder->getConnection(), $builder->useWritePdo);
-            $this->store($lookup, $rows, $readFromReplica ? $tags : []);
+            $this->store($lookup, $rows, $readFromReplica ? $lookup->tags : []);
         }
 
-        $collector?->endMeasuring($lookup instanceof CacheMiss ? 'Miss' : 'Bypass', [$key], $tags, $sql, $reflector->getParameters());
+        $collector?->endMeasuring($lookup instanceof CacheMiss ? 'Miss' : 'Bypass', [$key], $lookup instanceof CacheMiss ? $lookup->tags : [], $sql, $reflector->getParameters());
 
         return $rows;
     }
@@ -242,13 +241,12 @@ final class QueryHandler
     }
 
     /**
-     * @param  array<string>  $tags
-     * @param  list<CascadeRead>  $cascadeReads
+     * @param  list<TableRead>  $reads
      */
-    private function lookup(string $key, array $tags, array $cascadeReads, string $table): CacheHit|CacheMiss|null
+    private function lookup(string $key, array $reads, string $table): CacheHit|CacheMiss|null
     {
         try {
-            return $this->cache->lookup($key, $tags, $cascadeReads, $table);
+            return $this->cache->lookup($key, [], $reads, $table);
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Read, $exception, ['key' => $key]);
 
@@ -394,10 +392,10 @@ final class QueryHandler
         }
 
         $table = $tables[0];
-        $rows = $reflector->getRows()[$table] ?? null;
-        $keys = ColumnKeys::of($rows ?? []);
+        $column = Write::columnName($builder->primaryKeyOf($table));
+        $keys = ColumnKeys::of($reflector->getColumnPins()[$table][$column] ?? []);
 
-        return $keys->isEmpty() ? $write : $write->deletingKeys($table, $builder->primaryKeyOf($table), $keys);
+        return $keys->isEmpty() ? $write : $write->deletingKeys($table, $column, $keys);
     }
 
     private static function inTransaction(ConnectionInterface $connection): bool

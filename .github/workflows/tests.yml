@@ -107,7 +107,7 @@ jobs:
   suites:
     name: ${{ matrix.suite }} on ${{ matrix.database }} with ${{ matrix.redis-client }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     services: *services
 
     strategy:
@@ -122,6 +122,8 @@ jobs:
           - { suite: Fuzz, database: sqlite, redis-client: predis }
           - { suite: Fuzz, database: mysql, redis-client: phpredis }
           - { suite: Fuzz, database: mysql, redis-client: predis }
+          - { suite: Fuzz, database: mariadb, redis-client: phpredis }
+          - { suite: Fuzz, database: mariadb, redis-client: predis }
           - { suite: Fuzz, database: pgsql, redis-client: phpredis }
           - { suite: Fuzz, database: pgsql, redis-client: predis }
           - { suite: Concurrency, database: mysql, redis-client: phpredis }
@@ -134,6 +136,7 @@ jobs:
       REDIS_CLIENT: ${{ matrix.redis-client }}
       SUITE: ${{ matrix.suite }}
       MODEL_CACHE_FUZZ_ITERATIONS: ${{ matrix.suite == 'Fuzz' && '3000' || '' }}
+      MODEL_CACHE_FUZZ_RUNS: ${{ matrix.suite == 'Fuzz' && (github.event_name == 'schedule' && '40' || '10') || '' }}
 
     steps:
       - uses: actions/checkout@v7
@@ -150,6 +153,14 @@ jobs:
       - name: Run ${{ matrix.suite }} suite
         id: suite
         run: vendor/bin/phpunit --no-coverage --testsuite "$SUITE"
+
+      - name: Upload shrunk failing deploys
+        if: failure() && matrix.suite == 'Fuzz'
+        uses: actions/upload-artifact@v7
+        with:
+          name: failing-deploys-${{ matrix.database }}-${{ matrix.redis-client }}
+          path: build/fuzz/
+          if-no-files-found: ignore
 
       - uses: ./.github/actions/record
         if: always() && steps.suite.outcome != 'skipped'

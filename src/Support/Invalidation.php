@@ -11,13 +11,20 @@ use LogicException;
  * dependents the database may change along with them, whether the whole cache must be
  * retired, and how long reads from lagging replicas must not be stored afterwards.
  *
- * Merging many writes, such as a large import inside one transaction, would collect a tag per
- * row; past MAX_TAGS the tags are replaced by the table-wide tags covering them, or by retiring
- * the cache when some tag has no known coverage, so one invalidation stays a bounded script.
+ * Merging many writes, such as a large import inside one transaction, would collect a tag or a
+ * row key per row; past MAX_TAGS they are replaced by the table-wide tags covering them, or by
+ * retiring the cache when some tag has no known coverage, so one invalidation stays a bounded
+ * script.
  */
 final readonly class Invalidation
 {
     public const int MAX_TAGS = 1000;
+
+    /**
+     * Every class a serialized invalidation holds, for unserializing it with no other class
+     * allowed.
+     */
+    public const array SERIALIZED_CLASSES = [self::class, ColumnKeys::class, RowWrite::class];
 
     /**
      * @param  array<string, true>  $tags
@@ -25,6 +32,7 @@ final readonly class Invalidation
      * @param  array<string, array<string, true>>  $cascadeSources  database => `Write::dependentsFields()` of each written table
      * @param  array<string, string>  $connections  database => name of a connection to it
      * @param  array<string, array<string, array{fallback: string, keys: ColumnKeys}>>  $keyedSources  database => `Write::keyedDependentsFields()` by field
+     * @param  array<string, RowWrite>  $rowWrites  the rows each written table changed, by database and table
      */
     private function __construct(
         private array $tags,
@@ -35,6 +43,7 @@ final readonly class Invalidation
         public int $replicaLagSeconds,
         private bool $collapsed = false,
         private array $keyedSources = [],
+        private array $rowWrites = [],
     ) {}
 
     public static function none(): self
@@ -60,11 +69,23 @@ final readonly class Invalidation
 
     /**
      * @param  array<string>  $tags
-     * @param  array<string>  $tableWideTags  tags of the written tables that invalidate everything $tags do
+     * @param  array<string>  $tableWideTags  tags of the written tables that invalidate everything $tags and $rowWrites do
+     * @param  list<RowWrite>  $rowWrites
      */
-    public static function ofWrite(array $tags, array $tableWideTags, int $replicaLagSeconds): self
+    public static function ofWrite(array $tags, array $tableWideTags, int $replicaLagSeconds, array $rowWrites = []): self
     {
-        return (new self(array_fill_keys($tags, true), array_fill_keys($tableWideTags, true), [], [], null, $replicaLagSeconds))->bounded();
+        $byTable = [];
+        foreach ($rowWrites as $rowWrite) {
+            $id = self::rowWriteId($rowWrite);
+            $byTable[$id] = isset($byTable[$id]) ? $byTable[$id]->merge($rowWrite) : $rowWrite;
+        }
+
+        return (new self(array_fill_keys($tags, true), array_fill_keys($tableWideTags, true), [], [], null, $replicaLagSeconds, false, [], $byTable))->bounded();
+    }
+
+    private static function rowWriteId(RowWrite $rowWrite): string
+    {
+        return $rowWrite->database."\0".$rowWrite->table;
     }
 
     /**
@@ -115,6 +136,11 @@ final readonly class Invalidation
             }
         }
 
+        $rowWrites = $this->rowWrites;
+        foreach ($other->rowWrites as $id => $rowWrite) {
+            $rowWrites[$id] = isset($rowWrites[$id]) ? $rowWrites[$id]->merge($rowWrite) : $rowWrite;
+        }
+
         return (new self(
             $this->tags + $other->tags,
             $this->coverage === null || $other->coverage === null ? null : $this->coverage + $other->coverage,
@@ -124,17 +150,23 @@ final readonly class Invalidation
             max($this->replicaLagSeconds, $other->replicaLagSeconds),
             $this->collapsed || $other->collapsed,
             array_filter($keyedSources),
+            $rowWrites,
         ))->bounded();
     }
 
     public function isEmpty(): bool
     {
-        return $this->retires === null && $this->tags === [] && $this->cascadeSources === [] && $this->keyedSources === [];
+        return $this->retires === null && $this->tags === [] && $this->cascadeSources === [] && $this->keyedSources === [] && $this->rowWrites === [];
     }
 
     public function size(): int
     {
-        return count($this->tags) + array_sum(array_map('count', $this->cascadeSources)) + array_sum(array_map('count', $this->keyedSources));
+        return count($this->tags) + array_sum(array_map('count', $this->cascadeSources)) + array_sum(array_map('count', $this->keyedSources)) + $this->rowKeyCount();
+    }
+
+    private function rowKeyCount(): int
+    {
+        return array_sum(array_map(static fn (RowWrite $rowWrite): int => 1 + $rowWrite->size(), $this->rowWrites));
     }
 
     /**
@@ -182,6 +214,28 @@ final readonly class Invalidation
     }
 
     /**
+     * @return array<string, list<RowWrite>> database => the rows each written table changed, sorted by table
+     */
+    public function rowWrites(): array
+    {
+        $byDatabase = [];
+        $ids = array_keys($this->rowWrites);
+        sort($ids, SORT_STRING);
+
+        foreach ($ids as $id) {
+            $rowWrite = $this->rowWrites[$id];
+            $byDatabase[$rowWrite->database][] = $rowWrite;
+        }
+
+        ksort($byDatabase, SORT_STRING);
+
+        return $byDatabase;
+    }
+
+    /**
+     * The follow-up of an invalidation that reached databases whose dependents were not known
+     * yet: only their cascades. Its row writes were already applied, to whole tables.
+     *
      * @param  list<string>  $databases
      */
     public function onlyCascadesOf(array $databases): self
@@ -207,7 +261,7 @@ final readonly class Invalidation
 
     private function bounded(): self
     {
-        if (! $this->collapsed && count($this->tags) <= self::MAX_TAGS) {
+        if (! $this->collapsed && count($this->tags) + $this->rowKeyCount() <= self::MAX_TAGS) {
             return $this;
         }
 
