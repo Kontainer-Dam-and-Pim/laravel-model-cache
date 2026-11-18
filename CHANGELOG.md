@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## [1.0.3] - 2026-11-18
+### Changed
+- The README says which settings hosts serving at the same time must agree on: `prefix`, `redis_connection` and `dependent_tables`. A host that differs in one of them invalidates under its own prefix or Redis database, or misses dependencies the others declare, and leaves their entries stale; during a rolling deploy that changes one, run `model-cache:flush` once every host runs the new value. `consider_rows`, `scope`, `include_tables`, `exclude_tables` and the expiration settings may differ between hosts
+- The rolling-deploy fuzzer also generates raw writes spelled the ways hand-written SQL varies (quoting, keyword case, comments, upserts, `REPLACE`, joined updates and deletes, CTE deletes, `MERGE`), soft deletes added by a migration during a deploy, PostgreSQL inheriting tables and writes through updatable views. It found no further bugs; the package code is unchanged from 1.0.2
+
 ## [1.0.2] - 2026-11-17
 ### Fixed
 - Upserts did not invalidate what the `INSERT` triggers of the rows they insert write: `upsert()`, `INSERT ... ON CONFLICT DO UPDATE` and `ON DUPLICATE KEY UPDATE` were treated as updates only, and `REPLACE`/`INSERT OR REPLACE` as deletes only. Both now also fire insert triggers
