@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## [1.0.5] - 2026-11-24
+### Fixed
+- A write after the database ended a transaction Laravel still counted as open kept serving stale entries: MySQL and MariaDB roll back the whole transaction on a deadlock while Laravel's `DB::transaction()` leaves only one level, and a failed `ROLLBACK TO SAVEPOINT` leaves the level unchanged, so later writes committed as they ran while their invalidations waited for an outermost commit that might never come. On MySQL, MariaDB, PostgreSQL and SQLite from PHP 8.4 the database's own transaction state now decides: such writes invalidate at once, and what the rolled-back transaction held is invalidated with the next query
+
 ## [1.0.4] - 2026-11-24
 ### Changed
 - The rolling-deploy fuzzer compares reads the database rejects by their SQLSTATE alone. Their messages differ between the cached and uncached run in the self-join alias Laravel numbers per query, which it reported as a stale read. The package code is unchanged from 1.0.3
