@@ -31,7 +31,7 @@ use PDOException;
 /**
  * Runs a release's reads and writes in a pod. Every read runs through the cache and again
  * without it; each outcome is the rows in a canonical order, or the SQLSTATE the database
- * rejected the query with, so the coordinator can compare them exactly.
+ * rejected the query with and its message for the log, so the coordinator can compare them.
  */
 final readonly class Interpreter
 {

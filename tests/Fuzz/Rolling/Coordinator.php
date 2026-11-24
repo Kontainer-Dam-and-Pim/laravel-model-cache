@@ -247,7 +247,7 @@ final class Coordinator
         $this->statistics->rejectedReads += isset($outcome['database']['error']) ? 1 : 0;
         $this->statistics->releasesRead[$pod->release] = true;
 
-        if ($outcome['cached'] != $outcome['database']) {
+        if (self::comparable($outcome['cached']) != self::comparable($outcome['database'])) {
             throw new StaleRead(sprintf(
                 "Pod %s of release %d read a cached result that differs from the database at step %d: %s\nCached: %s\nDatabase: %s\nSeed: %d\nLast steps:\n  %s",
                 $step->pod,
@@ -260,6 +260,20 @@ final class Coordinator
                 implode("\n  ", $this->history),
             ), $step->action->describe());
         }
+    }
+
+    /**
+     * A rejection compares by its SQLSTATE alone: its message spells out the SQL, whose aliases
+     * for self-referencing relations come from a counter that advances on every query.
+     *
+     * @param  array<string, mixed>  $outcome
+     * @return array<string, mixed>
+     */
+    private static function comparable(array $outcome): array
+    {
+        unset($outcome['message']);
+
+        return $outcome;
     }
 
     /**

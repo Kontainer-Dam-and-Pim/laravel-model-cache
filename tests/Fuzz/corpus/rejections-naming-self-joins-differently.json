@@ -1,0 +1,326 @@
+{
+    "seed": 0,
+    "schemas": [
+        {
+            "tables": [
+                {
+                    "name": "audit",
+                    "columns": [
+                        {
+                            "name": "id",
+                            "kind": "int",
+                            "nullable": false,
+                            "default": null
+                        },
+                        {
+                            "name": "note",
+                            "kind": "text",
+                            "nullable": false,
+                            "default": "a"
+                        },
+                        {
+                            "name": "ref",
+                            "kind": "int",
+                            "nullable": true,
+                            "default": null
+                        }
+                    ],
+                    "primaryKey": [
+                        "id"
+                    ],
+                    "autoIncrement": true,
+                    "unique": [],
+                    "inherits": null
+                },
+                {
+                    "name": "t1",
+                    "columns": [
+                        {
+                            "name": "code",
+                            "kind": "text",
+                            "nullable": false,
+                            "default": null
+                        },
+                        {
+                            "name": "label",
+                            "kind": "text",
+                            "nullable": false,
+                            "default": "a"
+                        },
+                        {
+                            "name": "amount",
+                            "kind": "int",
+                            "nullable": true,
+                            "default": null
+                        },
+                        {
+                            "name": "fk1_code",
+                            "kind": "text",
+                            "nullable": true,
+                            "default": null
+                        }
+                    ],
+                    "primaryKey": [
+                        "code"
+                    ],
+                    "autoIncrement": false,
+                    "unique": [],
+                    "inherits": null
+                }
+            ],
+            "foreignKeys": [
+                {
+                    "name": "fk1",
+                    "child": "t1",
+                    "childColumns": [
+                        "fk1_code"
+                    ],
+                    "parent": "t1",
+                    "parentColumns": [
+                        "code"
+                    ],
+                    "onDelete": "cascade",
+                    "onUpdate": "set null"
+                }
+            ],
+            "views": [],
+            "triggers": []
+        },
+        {
+            "tables": [
+                {
+                    "name": "audit",
+                    "columns": [
+                        {
+                            "name": "id",
+                            "kind": "int",
+                            "nullable": false,
+                            "default": null
+                        },
+                        {
+                            "name": "note",
+                            "kind": "text",
+                            "nullable": false,
+                            "default": "a"
+                        },
+                        {
+                            "name": "ref",
+                            "kind": "int",
+                            "nullable": true,
+                            "default": null
+                        }
+                    ],
+                    "primaryKey": [
+                        "id"
+                    ],
+                    "autoIncrement": true,
+                    "unique": [],
+                    "inherits": null
+                },
+                {
+                    "name": "t1",
+                    "columns": [
+                        {
+                            "name": "code",
+                            "kind": "text",
+                            "nullable": false,
+                            "default": null
+                        },
+                        {
+                            "name": "label",
+                            "kind": "text",
+                            "nullable": false,
+                            "default": "a"
+                        },
+                        {
+                            "name": "fk1_code",
+                            "kind": "text",
+                            "nullable": true,
+                            "default": null
+                        }
+                    ],
+                    "primaryKey": [
+                        "code"
+                    ],
+                    "autoIncrement": false,
+                    "unique": [],
+                    "inherits": null
+                }
+            ],
+            "foreignKeys": [
+                {
+                    "name": "fk1",
+                    "child": "t1",
+                    "childColumns": [
+                        "fk1_code"
+                    ],
+                    "parent": "t1",
+                    "parentColumns": [
+                        "code"
+                    ],
+                    "onDelete": "cascade",
+                    "onUpdate": "set null"
+                }
+            ],
+            "views": [],
+            "triggers": []
+        }
+    ],
+    "releases": [
+        {
+            "number": 0,
+            "schema": {
+                "tables": [
+                    {
+                        "name": "audit",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "kind": "int",
+                                "nullable": false,
+                                "default": null
+                            },
+                            {
+                                "name": "note",
+                                "kind": "text",
+                                "nullable": false,
+                                "default": "a"
+                            },
+                            {
+                                "name": "ref",
+                                "kind": "int",
+                                "nullable": true,
+                                "default": null
+                            }
+                        ],
+                        "primaryKey": [
+                            "id"
+                        ],
+                        "autoIncrement": true,
+                        "unique": [],
+                        "inherits": null
+                    },
+                    {
+                        "name": "t1",
+                        "columns": [
+                            {
+                                "name": "code",
+                                "kind": "text",
+                                "nullable": false,
+                                "default": null
+                            },
+                            {
+                                "name": "label",
+                                "kind": "text",
+                                "nullable": false,
+                                "default": "a"
+                            },
+                            {
+                                "name": "amount",
+                                "kind": "int",
+                                "nullable": true,
+                                "default": null
+                            },
+                            {
+                                "name": "fk1_code",
+                                "kind": "text",
+                                "nullable": true,
+                                "default": null
+                            }
+                        ],
+                        "primaryKey": [
+                            "code"
+                        ],
+                        "autoIncrement": false,
+                        "unique": [],
+                        "inherits": null
+                    }
+                ],
+                "foreignKeys": [
+                    {
+                        "name": "fk1",
+                        "child": "t1",
+                        "childColumns": [
+                            "fk1_code"
+                        ],
+                        "parent": "t1",
+                        "parentColumns": [
+                            "code"
+                        ],
+                        "onDelete": "cascade",
+                        "onUpdate": "set null"
+                    }
+                ],
+                "views": [],
+                "triggers": []
+            },
+            "models": [
+                {
+                    "table": "audit",
+                    "keyName": "id",
+                    "keyKind": "int",
+                    "incrementing": true,
+                    "relations": [],
+                    "softDeletes": false
+                },
+                {
+                    "table": "t1",
+                    "keyName": "code",
+                    "keyKind": "text",
+                    "incrementing": false,
+                    "relations": [
+                        {
+                            "name": "parentOffk1",
+                            "kind": "belongsTo",
+                            "related": "t1",
+                            "foreignKey": "fk1_code",
+                            "ownerKey": "code"
+                        }
+                    ],
+                    "softDeletes": false
+                }
+            ],
+            "config": {
+                "consider_rows": true,
+                "scope": "all",
+                "exclude_tables": []
+            }
+        }
+    ],
+    "steps": [
+        {
+            "type": "lifecycle",
+            "pod": "old",
+            "lifecycle": "start",
+            "release": 0,
+            "secondConnection": false
+        },
+        {
+            "type": "migrate",
+            "schema": 1
+        },
+        {
+            "type": "pod",
+            "pod": "old",
+            "read": {
+                "api": "model",
+                "relation": "t1",
+                "conditions": [
+                    {
+                        "column": "amount",
+                        "operator": ">",
+                        "values": [
+                            4
+                        ]
+                    }
+                ],
+                "or": false,
+                "shape": "whereHas",
+                "subject": "parentOffk1",
+                "label": "a"
+            },
+            "write": null,
+            "transaction": null
+        }
+    ]
+}
