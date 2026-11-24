@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## [1.0.4] - 2026-11-24
+### Changed
+- The rolling-deploy fuzzer compares reads the database rejects by their SQLSTATE alone. Their messages differ between the cached and uncached run in the self-join alias Laravel numbers per query, which it reported as a stale read. The package code is unchanged from 1.0.3
+
 ## [1.0.3] - 2026-11-18
 ### Changed
 - The README says which settings hosts serving at the same time must agree on: `prefix`, `redis_connection` and `dependent_tables`. A host that differs in one of them invalidates under its own prefix or Redis database, or misses dependencies the others declare, and leaves their entries stale; during a rolling deploy that changes one, run `model-cache:flush` once every host runs the new value. `consider_rows`, `scope`, `include_tables`, `exclude_tables` and the expiration settings may differ between hosts
