@@ -306,6 +306,7 @@ If the schema cannot be read, every write retires the cache and the schema is re
 - Reads inside a transaction go to the database.
 - Invalidations run when the outermost transaction commits. A rollback discards them. A savepoint rollback keeps those of the enclosing transaction.
 - A transaction opened outside Laravel (raw `START TRANSACTION`, or directly on the PDO object) is detected from the driver. Its invalidations run at the raw `COMMIT`/`ROLLBACK`, or with the next query after it ends.
+- On MySQL, MariaDB, PostgreSQL and SQLite from PHP 8.4, the database's own transaction state decides, not Laravel's transaction level. A deadlock rolls back the whole transaction on MySQL and MariaDB while Laravel leaves only one level, and later writes commit as they run; they invalidate at once, and what the transaction held before is invalidated with the next query.
 
 ### Table names
 

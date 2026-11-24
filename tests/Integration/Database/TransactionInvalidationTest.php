@@ -58,4 +58,31 @@ final class TransactionInvalidationTest extends TestCase
 
         $this->assertCacheHas($key, $tags, 'Expected key to remain after rollback (queued invalidations cleared)');
     }
+
+    /**
+     * MySQL and MariaDB roll back the whole transaction on a deadlock while Laravel only leaves
+     * one level of it, so later writes commit as they run although Laravel still counts the
+     * transaction as open, and may never reach a commit that would apply their invalidations.
+     */
+    public function testWritesAfterTheServerEndedTheTransactionInvalidateAtOnce(): void
+    {
+        if (DB::getDriverName() === 'sqlite' && PHP_VERSION_ID < 80400) {
+            $this->markTestSkipped('PDO SQLite reports the transaction state of the database from PHP 8.4 on');
+        }
+
+        DB::table('cars')->insert(['id' => 12, 'name' => 'D', 'engine_id' => null, 'driver_id' => null]);
+        $name = static fn (): array => DB::table('cars')->where('id', 12)->pluck('name')->all();
+        $this->assertSame(['D'], $name());
+
+        DB::beginTransaction();
+        DB::getPdo()->exec('ROLLBACK');
+        DB::table('cars')->where('id', 12)->update(['name' => 'D2']);
+
+        $this->assertSame(1, DB::transactionLevel());
+        $this->assertSame(['D2'], $name());
+
+        DB::rollBack();
+
+        $this->assertSame(['D2'], $name());
+    }
 }
